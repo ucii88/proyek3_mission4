@@ -30,10 +30,21 @@
             top: 10px;
             right: 10px;
         }
+        .nav-item .nav-link.active {
+            background-color: #3c59dbff;
+            color: white !important;
+            border-radius: 5px;
+        }
+        .is-invalid {
+            border-color: #dc3545 !important;
+        }
+        .modal-content {
+            border-radius: 10px;
+        }
     </style>
 </head>
 <body>
-    <!-- Navigation  -->
+    <!-- Navigation -->
     <nav class="navbar navbar-expand-lg navbar-light bg-white">
         <div class="container">
             <a class="navbar-brand fw-bold text-primary" href="<?= base_url('/dashboard') ?>">
@@ -47,14 +58,14 @@
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav me-auto">
                     <li class="nav-item">
-                        <a class="nav-link" href="<?= base_url('/dashboard') ?>">
+                        <a class="nav-link <?= uri_string() === 'dashboard' ? 'active' : '' ?>" href="<?= base_url('/dashboard') ?>">
                             <i class="fas fa-home me-1"></i>Dashboard
                         </a>
                     </li>
                     
                     <?php if (session()->get('role') === 'admin'): ?>
                         <li class="nav-item">
-                            <a class="nav-link active" href="<?= base_url('/courses') ?>">
+                            <a class="nav-link <?= uri_string() === 'courses' ? 'active' : '' ?>" href="<?= base_url('/courses') ?>">
                                 <i class="fas fa-book me-1"></i>Manage Courses
                             </a>
                         </li>
@@ -65,7 +76,7 @@
                         </li>
                     <?php else: ?>
                         <li class="nav-item">
-                            <a class="nav-link active" href="<?= base_url('/courses') ?>">
+                            <a class="nav-link <?= uri_string() === 'courses' ? 'active' : '' ?>" href="<?= base_url('/courses') ?>">
                                 <i class="fas fa-book me-1"></i>Courses
                             </a>
                         </li>
@@ -81,9 +92,9 @@
                             <li><h6 class="dropdown-header">Role: <?= ucfirst(session()->get('role')) ?></h6></li>
                             <li><hr class="dropdown-divider"></li>
                             <li>
-                                <a class="dropdown-item text-danger" href="<?= base_url('/auth/logout') ?>" onclick="return confirm('Yakin logout?')">
+                                <button class="dropdown-item text-danger" data-bs-toggle="modal" data-bs-target="#logoutModal">
                                     <i class="fas fa-sign-out-alt me-2"></i>Logout
-                                </a>
+                                </button>
                             </li>
                         </ul>
                     </li>
@@ -125,7 +136,7 @@
         </div>
 
         <?php if (session()->get('role') === 'admin'): ?>
-            <!-- Admim-->
+            <!-- Admin -->
             <div class="card mb-4">
                 <div class="card-header">
                     <h5><i class="fas fa-plus me-2"></i>Tambah Mata Kuliah Baru</h5>
@@ -169,12 +180,68 @@
                 <?php endif; ?>
             </div>
         <?php else: ?>
+            <?php if (session()->get('role') === 'student'): ?>
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <h5 class="card-title"><i class="fas fa-check-square me-2"></i>Pilih Mata Kuliah</h5>
+                        <form id="enrollForm" method="post" action="<?= base_url('/courses/enrollMultiple') ?>">
+                            <div class="row">
+                                <?php foreach ($courses as $course): ?>
+                                    <?php if (!isset($enrolled) || !in_array($course['course_id'], array_column($enrolled, 'course_id'))): ?>
+                                        <div class="col-md-6 mb-3">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" name="course_ids[]" value="<?= $course['course_id'] ?>" id="course_<?= $course['course_id'] ?>" onchange="updateTotalCredits()">
+                                                <label class="form-check-label" for="course_<?= $course['course_id'] ?>">
+                                                    <?= esc($course['course_name']) ?> (<?= $course['credits'] ?> SKS)
+                                                </label>
+                                            </div>
+                                        </div>
+                                    <?php endif; ?>
+                                <?php endforeach; ?>
+                            </div>
+                            <div class="mb-3">
+                                <label>Total SKS: <span id="totalCredits">0</span>/24</label>
+                            </div>
+                            <button type="submit" class="btn btn-success" id="submitEnrollBtn">
+                                <i class="fas fa-user-plus me-2"></i>Daftar
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Unenroll Section -->
+                <?php if (isset($enrolled) && !empty($enrolled)): ?>
+                    <div class="card mb-4">
+                        <div class="card-body">
+                            <h5 class="card-title"><i class="fas fa-times-circle me-2"></i>Batal Daftar Mata Kuliah</h5>
+                            <form id="unenrollForm" method="post" action="<?= base_url('/courses/unenrollMultiple') ?>">
+                                <div class="row">
+                                    <?php foreach ($enrolled as $enrolledCourse): ?>
+                                        <div class="col-md-6 mb-3">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" name="course_ids[]" value="<?= $enrolledCourse['course_id'] ?>" id="unenroll_<?= $enrolledCourse['course_id'] ?>">
+                                                <label class="form-check-label" for="unenroll_<?= $enrolledCourse['course_id'] ?>">
+                                                    <?= esc($enrolledCourse['course_name']) ?> (<?= $enrolledCourse['credits'] ?> SKS)
+                                                </label>
+                                            </div>
+                                        </div>
+                                    <?php endforeach; ?>
+                                </div>
+                                <button type="submit" class="btn btn-danger" id="submitUnenrollBtn">
+                                    <i class="fas fa-trash me-2"></i>Batal Daftar
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                <?php endif; ?>
+            <?php endif; ?>
+
             <div class="row">
                 <?php foreach ($courses as $course): ?>
                     <div class="col-md-6 col-lg-4 mb-4">
                         <div class="card course-card h-100 position-relative">
                             <?php if (session()->get('role') === 'student' && isset($enrolled) && in_array($course['course_id'], array_column($enrolled, 'course_id'))): ?>
-                                <span class="badge bg-success enrolled-badge">Enrolled</span>
+                                <span class="badge bg-success enrolled-badge">Terdaftar</span>
                             <?php endif; ?>
                             
                             <div class="card-body">
@@ -197,19 +264,43 @@
                                             <i class="fas fa-edit me-1"></i>Edit
                                         </button>
                                         <button class="btn btn-danger btn-sm flex-fill" 
-                                                onclick="deleteCourse(<?= $course['course_id'] ?>, '<?= esc($course['course_name']) ?>')">
-                                            <i class="fas fa-trash me-1"></i>Delete
+                                                data-bs-toggle="modal" 
+                                                data-bs-target="#deleteModal<?= $course['course_id'] ?>">
+                                            <i class="fas fa-trash me-1"></i>Hapus
                                         </button>
+
+                                        <!-- Modal Delete -->
+                                        <div class="modal fade" id="deleteModal<?= $course['course_id'] ?>" tabindex="-1" aria-labelledby="deleteModalLabel<?= $course['course_id'] ?>" aria-hidden="true">
+                                            <div class="modal-dialog">
+                                                <div class="modal-content">
+                                                    <div class="modal-header">
+                                                        <h5 class="modal-title" id="deleteModalLabel<?= $course['course_id'] ?>">Konfirmasi Penghapusan</h5>
+                                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                                    </div>
+                                                    <div class="modal-body">
+                                                        Apakah Anda yakin ingin menghapus mata kuliah "<strong><?= esc($course['course_name']) ?></strong>" (SKS: <?= $course['credits'] ?>)? Data ini akan hilang permanen.
+                                                    </div>
+                                                    <div class="modal-footer">
+                                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                                                        <form action="<?= base_url('/courses/delete/' . $course['course_id']) ?>" method="post" style="display:inline;">
+                                                            <?= csrf_field() ?>
+                                                            <input type="hidden" name="confirm_delete" value="yes">
+                                                            <button type="submit" class="btn btn-danger">Hapus</button>
+                                                        </form>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
                                     <?php elseif (session()->get('role') === 'student'): ?>
                                         <!-- Mahasiswa -->
                                         <?php if (!isset($enrolled) || !in_array($course['course_id'], array_column($enrolled, 'course_id'))): ?>
                                             <button class="btn btn-success w-100" 
                                                     onclick="enrollCourse(<?= $course['course_id'] ?>, '<?= esc($course['course_name']) ?>')">
-                                                <i class="fas fa-user-plus me-2"></i>Enroll
+                                                <i class="fas fa-user-plus me-2"></i>Daftar
                                             </button>
                                         <?php else: ?>
                                             <button class="btn btn-secondary w-100" disabled>
-                                                <i class="fas fa-check me-2"></i>Already Enrolled
+                                                <i class="fas fa-check me-2"></i>Sudah Terdaftar
                                             </button>
                                         <?php endif; ?>
                                     <?php endif; ?>
@@ -255,45 +346,129 @@
         </div>
     <?php endif; ?>
 
+    <!-- Modal Logout -->
+    <div class="modal fade" id="logoutModal" tabindex="-1" aria-labelledby="logoutModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="logoutModalLabel">Konfirmasi Logout</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    Apakah Anda yakin ingin logout dari sistem?
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                    <form action="<?= base_url('/auth/logout') ?>" method="post" style="display:inline;">
+                        <?= csrf_field() ?>
+                        <input type="hidden" name="confirm_logout" value="yes">
+                        <button type="submit" class="btn btn-danger">Logout</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
     <script>
-        
         function editCourse(id, name, credits) {
             document.getElementById('edit_course_id').value = id;
             document.getElementById('edit_course_name').value = name;
             document.getElementById('edit_credits').value = credits;
         }
-        
-        function deleteCourse(id, name) {
-            if (confirm(`Apakah Anda yakin ingin menghapus mata kuliah "${name}"?`)) {
-                window.location.href = `<?= base_url('/courses/delete/') ?>${id}`;
-            }
-        }
-        
+
         function enrollCourse(id, name) {
             if (confirm(`Apakah Anda yakin ingin mendaftar mata kuliah "${name}"?`)) {
                 window.location.href = `<?= base_url('/courses/enroll/') ?>${id}`;
             }
         }
-        
+
         document.getElementById('addCourseForm')?.addEventListener('submit', function(e) {
             const courseName = document.getElementById('course_name').value.trim();
             const credits = document.getElementById('credits').value;
-            
+            let isValid = true;
+
             if (!courseName || courseName.length < 3) {
-                e.preventDefault();
                 alert('Nama mata kuliah harus minimal 3 karakter');
-                return false;
+                document.getElementById('course_name').classList.add('is-invalid');
+                isValid = false;
+            } else {
+                document.getElementById('course_name').classList.remove('is-invalid');
             }
-            
+
             if (credits < 1 || credits > 6) {
-                e.preventDefault();
                 alert('SKS harus antara 1-6');
-                return false;
+                document.getElementById('credits').classList.add('is-invalid');
+                isValid = false;
+            } else {
+                document.getElementById('credits').classList.remove('is-invalid');
+            }
+
+            if (!isValid) e.preventDefault();
+        });
+
+        document.getElementById('editCourseForm')?.addEventListener('submit', function(e) {
+            const courseName = document.getElementById('edit_course_name').value.trim();
+            const credits = document.getElementById('edit_credits').value;
+            let isValid = true;
+
+            if (!courseName || courseName.length < 3) {
+                alert('Nama mata kuliah harus minimal 3 karakter');
+                document.getElementById('edit_course_name').classList.add('is-invalid');
+                isValid = false;
+            } else {
+                document.getElementById('edit_course_name').classList.remove('is-invalid');
+            }
+
+            if (credits < 1 || credits > 6) {
+                alert('SKS harus antara 1-6');
+                document.getElementById('edit_credits').classList.add('is-invalid');
+                isValid = false;
+            } else {
+                document.getElementById('edit_credits').classList.remove('is-invalid');
+            }
+
+            if (!isValid) e.preventDefault();
+        });
+
+        function updateTotalCredits() {
+            const checkboxes = document.querySelectorAll('#enrollForm input[type="checkbox"]:checked');
+            let totalCredits = 0;
+            checkboxes.forEach(checkbox => {
+                const credits = parseInt(checkbox.nextElementSibling.textContent.match(/\d+/)[0]);
+                totalCredits += credits;
+            });
+            document.getElementById('totalCredits').textContent = totalCredits;
+            document.getElementById('submitEnrollBtn').disabled = totalCredits > 24;
+        }
+
+        document.getElementById('enrollForm')?.addEventListener('submit', function(e) {
+            const checkboxes = document.querySelectorAll('#enrollForm input[type="checkbox"]:checked');
+            if (checkboxes.length === 0) {
+                alert('Pilih setidaknya satu mata kuliah');
+                e.preventDefault();
+                return;
+            }
+            const totalCredits = parseInt(document.getElementById('totalCredits').textContent);
+            if (totalCredits > 24) {
+                alert('Total SKS melebihi batas maksimum (24 SKS)');
+                e.preventDefault();
             }
         });
-        
+
+        document.getElementById('unenrollForm')?.addEventListener('submit', function(e) {
+            const checkboxes = document.querySelectorAll('#unenrollForm input[type="checkbox"]:checked');
+            if (checkboxes.length === 0) {
+                alert('Pilih setidaknya satu mata kuliah untuk dibatalkan');
+                e.preventDefault();
+                return;
+            }
+            if (!confirm('Apakah Anda yakin ingin membatalkan pendaftaran mata kuliah yang dipilih?')) {
+                e.preventDefault();
+            }
+        });
+
         setTimeout(function() {
             const alerts = document.querySelectorAll('.alert');
             alerts.forEach(function(alert) {
@@ -302,5 +477,3 @@
             });
         }, 5000);
     </script>
-</body>
-</html>

@@ -13,10 +13,10 @@ class CourseModel extends Model
     protected $updatedField = 'updated_at';
 
     // Validation rules
-  protected $validationRules = [
-    'course_name' => 'required|min_length[3]|max_length[100]',
-    'credits' => 'required|integer|greater_than[0]|less_than_equal_to[6]' 
-];
+    protected $validationRules = [
+        'course_name' => 'required|min_length[3]|max_length[100]',
+        'credits' => 'required|integer|greater_than[0]|less_than_equal_to[6]' 
+    ];
 
     protected $validationMessages = [
         'course_name' => [
@@ -41,7 +41,6 @@ class CourseModel extends Model
     {
         return $this->find($courseId);
     }
-
 
     public function enroll($studentId, $courseId)
     {
@@ -96,8 +95,8 @@ class CourseModel extends Model
     {
         return $this->db->table('takes')
             ->select('users.user_id, users.full_name, users.email, students.entry_year, takes.enroll_date')
+            ->join('users', 'users.user_id = takes.student_id')
             ->join('students', 'students.student_id = takes.student_id')
-            ->join('users', 'users.user_id = students.student_id')
             ->where('takes.course_id', $courseId)
             ->orderBy('takes.enroll_date', 'DESC')
             ->get()
@@ -127,8 +126,8 @@ class CourseModel extends Model
     {
         return $this->db->table('takes')
             ->select('users.user_id, users.full_name, users.email, students.entry_year, takes.enroll_date')
+            ->join('users', 'users.user_id = takes.student_id')
             ->join('students', 'students.student_id = takes.student_id')
-            ->join('users', 'users.user_id = students.student_id')
             ->where('takes.course_id', $courseId)
             ->orderBy('users.full_name', 'ASC')
             ->get()
@@ -202,8 +201,10 @@ class CourseModel extends Model
         try {
             $this->db->transStart();
             
+            // Hapus data takes terlebih dahulu
             $this->db->table('takes')->whereIn('course_id', $courseIds)->delete();
             
+            // Hapus courses
             $this->whereIn('course_id', $courseIds)->delete();
             
             $this->db->transComplete();
@@ -262,6 +263,68 @@ class CourseModel extends Model
         } catch (\Exception $e) {
             log_message('error', 'Error deleting course with check: ' . $e->getMessage());
             throw $e;
+        }
+    }
+
+    public function enrollMultiple($studentId, $courseIds)
+    {
+        if (!is_array($courseIds) || empty($courseIds)) {
+            return false;
+        }
+
+        try {
+            $this->db->transStart();
+            $successCount = 0;
+
+            foreach ($courseIds as $courseId) {
+                if (!$this->isStudentEnrolled($studentId, $courseId)) {
+                    $data = [
+                        'student_id' => $studentId,
+                        'course_id' => $courseId,
+                        'enroll_date' => date('Y-m-d')
+                    ];
+                    if ($this->db->table('takes')->insert($data)) {
+                        $successCount++;
+                    }
+                }
+            }
+
+            $this->db->transComplete();
+            return $successCount > 0 ? $successCount : false;
+        } catch (\Exception $e) {
+            $this->db->transRollback();
+            log_message('error', 'Error enrolling multiple courses: ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    public function unenrollMultiple($studentId, $courseIds)
+    {
+        if (!is_array($courseIds) || empty($courseIds)) {
+            return false;
+        }
+
+        try {
+            $this->db->transStart();
+            $successCount = 0;
+
+            foreach ($courseIds as $courseId) {
+                if ($this->isStudentEnrolled($studentId, $courseId)) {
+                    if ($this->db->table('takes')
+                        ->where('student_id', $studentId)
+                        ->where('course_id', $courseId)
+                        ->delete()) {
+                        $successCount++;
+                    }
+                }
+            }
+
+            $this->db->transComplete();
+            return $successCount > 0 ? $successCount : false;
+        } catch (\Exception $e) {
+            $this->db->transRollback();
+            log_message('error', 'Error unenrolling multiple courses: ' . $e->getMessage());
+            return false;
         }
     }
 }

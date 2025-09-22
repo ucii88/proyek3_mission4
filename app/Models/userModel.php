@@ -53,7 +53,7 @@ class UserModel extends Model
     {
         return $this->db->table('users')
             ->select('users.*, students.entry_year')
-            ->join('students', 'students.student_id = users.user_id')
+            ->join('students', 'students.student_id = users.user_id', 'inner')
             ->where('users.user_id', $userId)
             ->where('users.role', 'student')
             ->get()
@@ -64,7 +64,7 @@ class UserModel extends Model
     {
         return $this->db->table('users')
             ->select('users.*, students.entry_year')
-            ->join('students', 'students.student_id = users.user_id')
+            ->join('students', 'students.student_id = users.user_id', 'inner')
             ->where('users.role', 'student')
             ->orderBy('users.full_name', 'ASC')
             ->get()
@@ -76,16 +76,20 @@ class UserModel extends Model
         $this->db->transStart();
         
         try {
- 
-            $userData['password'] = password_hash($userData['password'], PASSWORD_DEFAULT);
+            // Hash password jika belum di-hash
+            if (isset($userData['password']) && !empty($userData['password'])) {
+                $userData['password'] = password_hash($userData['password'], PASSWORD_DEFAULT);
+            }
             
+            // Insert ke tabel users
             if (!$this->insert($userData)) {
-                throw new \Exception('Failed to create user');
+                throw new \Exception('Failed to create user: ' . implode(', ', $this->errors()));
             }
             
             $userId = $this->insertID();
             $studentData['student_id'] = $userId;
             
+            // Insert ke tabel students
             if (!$this->db->table('students')->insert($studentData)) {
                 throw new \Exception('Failed to create student record');
             }
@@ -110,17 +114,20 @@ class UserModel extends Model
         $this->db->transStart();
         
         try {
-
-            if (empty($userData['password'])) {
-                unset($userData['password']);
-            } else {
+            // Hash password jika ada dan tidak kosong
+            if (isset($userData['password']) && !empty($userData['password'])) {
                 $userData['password'] = password_hash($userData['password'], PASSWORD_DEFAULT);
+            } else {
+                // Hapus password dari data update jika kosong
+                unset($userData['password']);
             }
             
+            // Update tabel users
             if (!$this->update($userId, $userData)) {
-                throw new \Exception('Failed to update user');
+                throw new \Exception('Failed to update user: ' . implode(', ', $this->errors()));
             }
             
+            // Update tabel students jika ada data student
             if ($studentData && is_array($studentData)) {
                 if (!$this->db->table('students')->where('student_id', $userId)->update($studentData)) {
                     throw new \Exception('Failed to update student record');
@@ -142,11 +149,13 @@ class UserModel extends Model
         $this->db->transStart();
         
         try {
-
+            // Hapus data enrollments (takes) terlebih dahulu
             $this->db->table('takes')->where('student_id', $userId)->delete();
             
+            // Hapus data students
             $this->db->table('students')->where('student_id', $userId)->delete();
             
+            // Hapus data users
             $this->delete($userId);
             
             $this->db->transComplete();
@@ -162,5 +171,41 @@ class UserModel extends Model
     public function getAllAdmins()
     {
         return $this->where('role', 'admin')->orderBy('full_name', 'ASC')->findAll();
+    }
+
+    // Method untuk validasi update dengan pengecualian user_id
+    public function validateUpdate($data, $userId)
+    {
+        $rules = [
+            'username' => "required|is_unique[users.username,user_id,{$userId}]|min_length[3]|max_length[50]",
+            'email' => "required|valid_email|is_unique[users.email,user_id,{$userId}]",
+            'full_name' => 'required|min_length[2]|max_length[100]'
+        ];
+        
+        if (!empty($data['password'])) {
+            $rules['password'] = 'min_length[6]';
+        }
+        
+        return $this->validate($data, $rules);
+    }
+
+    // Method untuk cek apakah user adalah student
+    public function isStudent($userId)
+    {
+        $user = $this->find($userId);
+        return $user && $user['role'] === 'student';
+    }
+
+    // Method untuk cek apakah user adalah admin
+    public function isAdmin($userId)
+    {
+        $user = $this->find($userId);
+        return $user && $user['role'] === 'admin';
+    }
+
+    // Method untuk mendapatkan total students
+    public function getTotalStudents()
+    {
+        return $this->where('role', 'student')->countAllResults();
     }
 }

@@ -1,94 +1,74 @@
 <?php
 namespace App\Controllers;
 
-use App\Models\UserModel;
 use CodeIgniter\Controller;
-use CodeIgniter\I18n\Time;
+use App\Models\UserModel;
 
 class AuthController extends Controller
 {
+    protected $userModel;
+
+    public function __construct()
+    {
+        $this->userModel = new UserModel();
+    }
+
     public function loginForm()
     {
-        // Redirect ke dashboard jika sudah login
         if (session()->get('isLoggedIn')) {
-            return redirect()->to(base_url('/dashboard'));
+            $role = session()->get('role');
+            return redirect()->to($role === 'admin' ? '/dashboard' : '/courses');
         }
-        
-        helper('url');
         return view('login');
     }
 
     public function login()
     {
-        $session = session();
-        $model = new UserModel();
         $email = $this->request->getPost('email');
         $password = $this->request->getPost('password');
 
-        // Validation
-        $validation = \Config\Services::validation();
-        $validation->setRules([
-            'email' => 'required|valid_email',
-            'password' => 'required|min_length[6]'
-        ]);
-
-        if (!$validation->withRequest($this->request)->run()) {
-            $session->setFlashdata('errors', $validation->getErrors());
-            return redirect()->back()->withInput();
+        if (empty($email) || empty($password)) {
+            return redirect()->back()->with('error', 'Email dan password wajib diisi.');
         }
 
-        log_message('debug', "Login attempt at " . Time::now() . ": Email = " . $email);
-
         try {
-            $user = $model->getUserByEmail($email);
-            
-            if ($user && password_verify($password, $user['password'])) {
-                // Set session data
-                $sessionData = [
-                    'user_id' => $user['user_id'],
-                    'username' => $user['username'],
-                    'email' => $user['email'],
-                    'role' => $user['role'],
-                    'full_name' => $user['full_name'],
-                    'isLoggedIn' => true
-                ];
-                
-                // Jika mahasiswa, ambil student_id juga
-                if ($user['role'] === 'student') {
-                    $student = $model->getStudentByUserId($user['user_id']);
-                    if ($student) {
-                        $sessionData['student_id'] = $student['student_id'];
-                        $sessionData['entry_year'] = $student['entry_year'];
-                    }
-                }
-                
-                $session->set($sessionData);
-                
-                log_message('debug', "Login successful for user: " . $user['full_name']);
-                
-                $session->setFlashdata('success', 'Welcome back, ' . $user['full_name'] . '!');
-                
-                return redirect()->to(base_url('/dashboard'));
-            } else {
-                log_message('debug', "Login failed for email: " . $email);
-                $session->setFlashdata('error', 'Invalid email or password');
-                return redirect()->back()->withInput();
+            $user = $this->userModel->getUserByEmail($email);
+            if (!$user || !password_verify($password, $user['password'])) {
+                return redirect()->back()->with('error', 'Email atau password salah.');
             }
+
+            session()->set([
+                'isLoggedIn' => true,
+                'user_id' => $user['user_id'],
+                'full_name' => $user['full_name'],
+                'role' => $user['role'],
+                'email' => $user['email']
+            ]);
+
+            return redirect()->to($user['role'] === 'admin' ? '/dashboard' : '/courses');
         } catch (\Exception $e) {
-            log_message('error', "Database error during login: " . $e->getMessage());
-            $session->setFlashdata('error', 'System error. Please try again.');
-            return redirect()->back();
+            log_message('error', 'Error during login: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Terjadi kesalahan saat login. Silakan coba lagi.');
         }
     }
 
     public function logout()
     {
-        $fullName = session()->get('full_name');
-        session()->destroy();
-        
-        session()->setFlashdata('success', 'You have been logged out successfully.');
-        log_message('debug', "User logged out: " . ($fullName ?? 'unknown'));
-        
-        return redirect()->to(base_url('/login'));
+        if (!session()->get('isLoggedIn')) {
+            return redirect()->to('/login')->with('error', 'Anda belum login');
+        }
+
+        $confirm = $this->request->getPost('confirm_logout');
+        if (!$confirm || $confirm !== 'yes') {
+            return redirect()->back()->with('error', 'Konfirmasi logout diperlukan. Silakan coba lagi.');
+        }
+
+        try {
+            session()->destroy();
+            return redirect()->to('/login')->with('success', 'Anda telah logout');
+        } catch (\Exception $e) {
+            log_message('error', 'Error during logout: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Gagal logout. Silakan coba lagi.');
+        }
     }
 }

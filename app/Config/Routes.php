@@ -11,33 +11,32 @@ $routes->get('/login', 'AuthController::loginForm');
 
 $routes->group('auth', function ($routes) {
     $routes->post('login', 'AuthController::login');
-    $routes->get('logout', 'AuthController::logout');
+    $routes->post('logout', 'AuthController::logout', ['filter' => 'auth']); // Ubah dari GET ke POST dan tambahkan filter auth
 });
 
 // Dashboard 
 $routes->get('/dashboard', 'DashboardController::index', ['filter' => 'auth']);
 
-
 $routes->group('courses', ['filter' => 'auth'], function ($routes) {
     $routes->get('/', 'CourseController::index');
+    $routes->get('getAll', 'CourseController::getAll');
     $routes->post('create', 'CourseController::create');
     $routes->post('update', 'CourseController::update');
-    $routes->get('delete/(:num)', 'CourseController::delete/$1');
-    
-    // Enrollment
-    $routes->get('enroll/(:num)', 'CourseController::enroll/$1');
-    $routes->get('unenroll/(:num)', 'CourseController::unenroll/$1');
-    
-
+    $routes->delete('delete/(:num)', 'CourseController::delete/$1');
+    $routes->post('enroll/(:num)', 'CourseController::enroll/$1');
+    $routes->post('enrollMultiple', 'CourseController::enrollMultiple');
+    $routes->post('unenrollMultiple', 'CourseController::unenrollMultiple'); // Tambah unenroll multiple
+    $routes->delete('unenroll/(:num)', 'CourseController::unenroll/$1');
     $routes->get('detail/(:num)', 'CourseController::detail/$1');
     $routes->get('search', 'CourseController::search');
 });
 
 $routes->group('students', ['filter' => 'auth'], function ($routes) {
     $routes->get('/', 'StudentController::index');
+    $routes->get('getAll', 'StudentController::getAll');
     $routes->post('create', 'StudentController::create');
     $routes->post('update', 'StudentController::update');
-    $routes->get('delete/(:num)', 'StudentController::delete/$1');
+    $routes->delete('delete/(:num)', 'StudentController::delete/$1');
     $routes->get('view/(:num)', 'StudentController::view/$1');
     $routes->post('bulk-delete', 'StudentController::bulkDelete');
 });
@@ -58,14 +57,12 @@ $routes->group('api', ['filter' => 'auth'], function ($routes) {
     });
 });
 
-
 $routes->group('reports', ['filter' => 'auth'], function ($routes) {
     $routes->get('/', 'ReportController::index');
     $routes->get('enrollment', 'ReportController::enrollment');
     $routes->get('courses', 'ReportController::courses');
     $routes->get('students', 'ReportController::students');
 });
-
 
 if (ENVIRONMENT === 'development') {
     $routes->get('test/db', 'TestController::database');

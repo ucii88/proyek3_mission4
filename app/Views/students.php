@@ -25,10 +25,15 @@
         .feature-card:hover {
             transform: translateY(-3px);
         }
+        .nav-item .nav-link.active {
+            background-color: #3c59dbff;
+            color: white !important;
+            border-radius: 5px;
+        }
     </style>
 </head>
 <body>
-    <!-- Navigation (consistent with dashboard and courses) -->
+    <!-- Navigation -->
     <nav class="navbar navbar-expand-lg navbar-light bg-white">
         <div class="container">
             <a class="navbar-brand fw-bold text-primary" href="<?= base_url('/dashboard') ?>">
@@ -67,9 +72,9 @@
                             <li><h6 class="dropdown-header">Role: <?= ucfirst(session()->get('role')) ?></h6></li>
                             <li><hr class="dropdown-divider"></li>
                             <li>
-                                <a class="dropdown-item text-danger" href="<?= base_url('/auth/logout') ?>" onclick="return confirm('Yakin logout?')">
+                                <button class="dropdown-item text-danger" data-bs-toggle="modal" data-bs-target="#logoutModal">
                                     <i class="fas fa-sign-out-alt me-2"></i>Logout
-                                </a>
+                                </button>
                             </li>
                         </ul>
                     </li>
@@ -78,108 +83,193 @@
         </div>
     </nav>
 
-    <!-- Page Content -->
     <div class="container mt-4">
-        <!-- Alerts if any -->
         <?php if (session()->getFlashdata('success')): ?>
-            <div class="alert alert-success alert-dismissible fade show" role="alert">
+            <div class="alert alert-success alert-dismissible fade show">
                 <i class="fas fa-check-circle me-2"></i><?= session()->getFlashdata('success') ?>
                 <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
             </div>
         <?php endif; ?>
         
         <?php if (session()->getFlashdata('error')): ?>
-            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <div class="alert alert-danger alert-dismissible fade show">
                 <i class="fas fa-exclamation-triangle me-2"></i><?= session()->getFlashdata('error') ?>
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        <?php endif; ?>
+
+        <?php if (session()->getFlashdata('errors')): ?>
+            <div class="alert alert-danger alert-dismissible fade show">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                <ul class="mb-0">
+                    <?php foreach (session()->getFlashdata('errors') as $field => $error): ?>
+                        <li><?= esc($error) ?></li>
+                    <?php endforeach; ?>
+                </ul>
                 <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
             </div>
         <?php endif; ?>
 
         <!-- Page Header -->
         <div class="page-header">
-            <h2 class="mb-1">Manage Students</h2>
-            <p class="mb-0">Tambah, edit, dan hapus data mahasiswa</p>
+            <div class="row align-items-center">
+                <div class="col-md-8">
+                    <h2><i class="fas fa-users me-2"></i>Manage Students</h2>
+                    <p class="mb-0 opacity-75">Tambah, edit, dan kelola data mahasiswa</p>
+                </div>
+            </div>
         </div>
 
-        <!-- Add Student Form -->
-        <div class="card feature-card mb-4">
+        <!-- Tambah Mahasiswa -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5><i class="fas fa-plus me-2"></i>Tambah Mahasiswa Baru</h5>
+            </div>
             <div class="card-body">
-                <h5 class="card-title"><i class="fas fa-user-plus me-2"></i>Tambah Mahasiswa Baru</h5>
                 <form method="post" action="<?= base_url('/students/create') ?>" id="addStudentForm">
                     <?= csrf_field() ?>
                     <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label for="username" class="form-label">Username</label>
-                            <input type="text" name="username" id="username" class="form-control" required placeholder="Username">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="username" class="form-label">Username</label>
+                                <input type="text" name="username" id="username" class="form-control" value="<?= old('username') ?>" required>
+                            </div>
                         </div>
-                        <div class="col-md-6 mb-3">
-                            <label for="email" class="form-label">Email</label>
-                            <input type="email" name="email" id="email" class="form-control" required placeholder="Email">
-                        </div>
-                    </div>
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label for="password" class="form-label">Password</label>
-                            <input type="password" name="password" id="password" class="form-control" required placeholder="Password">
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label for="full_name" class="form-label">Full Name</label>
-                            <input type="text" name="full_name" id="full_name" class="form-control" required placeholder="Full Name">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="email" class="form-label">Email</label>
+                                <input type="email" name="email" id="email" class="form-control" value="<?= old('email') ?>" required>
+                            </div>
                         </div>
                     </div>
                     <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label for="entry_year" class="form-label">Entry Year</label>
-                            <input type="number" name="entry_year" id="entry_year" class="form-control" required placeholder="Entry Year" min="2000" max="<?= date('Y') ?>">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="password" class="form-label">Password</label>
+                                <input type="password" name="password" id="password" class="form-control" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="full_name" class="form-label">Nama Lengkap</label>
+                                <input type="text" name="full_name" id="full_name" class="form-control" value="<?= old('full_name') ?>" required>
+                            </div>
                         </div>
                     </div>
-                    <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-plus me-2"></i>Add Student
-                    </button>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="entry_year" class="form-label">Tahun Masuk</label>
+                                <input type="number" name="entry_year" id="entry_year" class="form-control" value="<?= old('entry_year') ?>" min="2000" max="<?= date('Y') ?>" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">&nbsp;</label>
+                                <button type="submit" class="btn btn-primary d-block w-100">
+                                    <i class="fas fa-plus me-2"></i>Tambah
+                                </button>
+                            </div>
+                        </div>
+                    </div>
                 </form>
             </div>
         </div>
 
-        <!-- Students Table -->
-        <div class="card feature-card">
+        <!-- Daftar Mahasiswa -->
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5><i class="fas fa-list me-2"></i>Daftar Mahasiswa</h5>
+                <div>
+                    <button class="btn btn-outline-primary btn-sm" onclick="refreshStudentTable()">
+                        <i class="fas fa-refresh me-1"></i>Refresh
+                    </button>
+                </div>
+            </div>
             <div class="card-body">
-                <h5 class="card-title"><i class="fas fa-list me-2"></i>Daftar Mahasiswa</h5>
-                <div class="table-responsive">
-                    <table class="table table-hover">
-                        <thead class="table-light">
-                            <tr>
-                                <th>ID</th>
-                                <th>Name</th>
-                                <th>Email</th>
-                                <th>Entry Year</th>
-                                <th>Action</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php if (empty($students)): ?>
+                <?php if (isset($students) && !empty($students)): ?>
+                    <div class="table-responsive">
+                        <table class="table table-hover table-striped">
+                            <thead class="table-dark">
                                 <tr>
-                                    <td colspan="5" class="text-center">Tidak ada data mahasiswa</td>
+                                    <th>#</th>
+                                    <th>Username</th>
+                                    <th>Nama Lengkap</th>
+                                    <th>Email</th>
+                                    <th>Tahun Masuk</th>
+                                    <th>Aksi</th>
                                 </tr>
-                            <?php else: ?>
-                                <?php foreach ($students as $student): ?>
-                                    <tr>
-                                        <td><?= esc($student['user_id']) ?></td>
-                                        <td><?= esc($student['full_name']) ?></td>
-                                        <td><?= esc($student['email']) ?></td>
-                                        <td><?= esc($student['entry_year']) ?></td>
-                                        <td>
-                                            <a href="<?= base_url('/students/edit/' . $student['user_id']) ?>" class="btn btn-sm btn-warning">
-                                                <i class="fas fa-edit"></i> Edit
-                                            </a>
-                                            <a href="<?= base_url('/students/delete/' . $student['user_id']) ?>" class="btn btn-sm btn-danger" onclick="return confirm('Apakah Anda yakin ingin menghapus mahasiswa ini?')">
-                                                <i class="fas fa-trash"></i> Delete
-                                            </a>
-                                        </td>
-                                    </tr>
+                            </thead>
+                            <tbody>
+                                <?php $no = 1; foreach ($students as $student): ?>
+                                <tr>
+                                    <td><?= $no++ ?></td>
+                                    <td><?= esc($student['username']) ?></td>
+                                    <td><?= esc($student['full_name']) ?></td>
+                                    <td><?= esc($student['email']) ?></td>
+                                    <td><?= esc($student['entry_year'] ?? 'N/A') ?></td>
+                                    <td>
+                                        <button class="btn btn-info btn-sm" onclick="viewStudent(<?= $student['user_id'] ?>)">
+                                            <i class="fas fa-eye"></i>
+                                        </button>
+                                        <button class="btn btn-warning btn-sm" onclick="editStudent(<?= $student['user_id'] ?>)">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        <button class="btn btn-danger btn-sm" onclick="deleteStudent(<?= $student['user_id'] ?>, '<?= esc($student['full_name']) ?>')">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </td>
+                                </tr>
                                 <?php endforeach; ?>
-                            <?php endif; ?>
-                        </tbody>
-                    </table>
+                            </tbody>
+                        </table>
+                    </div>
+                <?php else: ?>
+                    <div class="text-center py-5">
+                        <i class="fas fa-users fa-4x text-muted mb-3"></i>
+                        <h4 class="text-muted">Belum ada data mahasiswa</h4>
+                        <p class="text-muted">Silakan tambah mahasiswa baru menggunakan form di atas</p>
+                    </div>
+                <?php endif; ?>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Logout -->
+    <div class="modal fade" id="logoutModal" tabindex="-1" aria-labelledby="logoutModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="logoutModalLabel">Konfirmasi Logout</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    Apakah Anda yakin ingin logout dari sistem?
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                    <form action="<?= base_url('/auth/logout') ?>" method="post" style="display:inline;">
+                        <?= csrf_field() ?>
+                        <input type="hidden" name="confirm_logout" value="yes">
+                        <button type="submit" class="btn btn-danger">Logout</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal View Student -->
+    <div class="modal fade" id="viewStudentModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Detail Mahasiswa</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="studentDetail">
+                        <!-- Content will be loaded here -->
+                    </div>
                 </div>
             </div>
         </div>
@@ -226,6 +316,84 @@
                 return false;
             }
         });
+
+        function viewStudent(userId) {
+            // Implement view student functionality
+            fetch(`<?= base_url('/students/view/') ?>${userId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.student) {
+                        const student = data.student;
+                        const enrolledCourses = data.enrolled_courses || [];
+                        
+                        let coursesHtml = '';
+                        if (enrolledCourses.length > 0) {
+                            coursesHtml = '<ul class="list-group">';
+                            enrolledCourses.forEach(course => {
+                                coursesHtml += `<li class="list-group-item">${course.course_name} (${course.credits} SKS)</li>`;
+                            });
+                            coursesHtml += '</ul>';
+                        } else {
+                            coursesHtml = '<p class="text-muted">Belum ada mata kuliah yang diambil</p>';
+                        }
+
+                        document.getElementById('studentDetail').innerHTML = `
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <h6>Informasi Personal</h6>
+                                    <p><strong>Username:</strong> ${student.username}</p>
+                                    <p><strong>Nama Lengkap:</strong> ${student.full_name}</p>
+                                    <p><strong>Email:</strong> ${student.email}</p>
+                                    <p><strong>Tahun Masuk:</strong> ${student.entry_year || 'N/A'}</p>
+                                </div>
+                                <div class="col-md-6">
+                                    <h6>Mata Kuliah yang Diambil</h6>
+                                    ${coursesHtml}
+                                </div>
+                            </div>
+                        `;
+                        
+                        new bootstrap.Modal(document.getElementById('viewStudentModal')).show();
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Gagal memuat data mahasiswa');
+                });
+        }
+
+        function editStudent(userId) {
+            // Implement edit student functionality
+            alert('Edit functionality will be implemented');
+        }
+
+        function deleteStudent(userId, fullName) {
+            if (confirm(`Apakah Anda yakin ingin menghapus mahasiswa "${fullName}"?`)) {
+                fetch(`<?= base_url('/students/delete/') ?>${userId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.message) {
+                        alert(data.message);
+                        location.reload();
+                    } else {
+                        alert('Gagal menghapus mahasiswa');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Terjadi kesalahan');
+                });
+            }
+        }
+
+        function refreshStudentTable() {
+            location.reload();
+        }
         
         // Auto-hide alerts
         setTimeout(function() {

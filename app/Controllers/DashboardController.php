@@ -11,7 +11,6 @@ class DashboardController extends Controller
             return redirect()->to(base_url('/login'));
         }
         $data['role'] = session()->get('role');
-        $data['full_name'] = session()->get('full_name');
         return view('dashboard', $data);
     }
 }

@@ -1,0 +1,14 @@
+DEBUG - 2025-09-20 06:04:14 --> Session: Class initialized using 'CodeIgniter\Session\Handlers\FileHandler' driver.
+DEBUG - 2025-09-20 06:04:14 --> User logged out: unknown
+DEBUG - 2025-09-20 06:04:15 --> Session: Class initialized using 'CodeIgniter\Session\Handlers\FileHandler' driver.
+DEBUG - 2025-09-20 06:04:23 --> Session: Class initialized using 'CodeIgniter\Session\Handlers\FileHandler' driver.
+DEBUG - 2025-09-20 06:04:23 --> Login attempt at 2025-09-20 06:04:23: Email = suci@student.com
+DEBUG - 2025-09-20 06:04:24 --> Login successful for user: Suci Sulistiawati
+DEBUG - 2025-09-20 06:04:24 --> Session: Class initialized using 'CodeIgniter\Session\Handlers\FileHandler' driver.
+DEBUG - 2025-09-20 06:04:24 --> Session: Class initialized using 'CodeIgniter\Session\Handlers\FileHandler' driver.
+DEBUG - 2025-09-20 06:04:24 --> Login attempt at 2025-09-20 06:04:24: Email = suci@student.com
+DEBUG - 2025-09-20 06:04:24 --> Login successful for user: Suci Sulistiawati
+DEBUG - 2025-09-20 06:04:24 --> Session: Class initialized using 'CodeIgniter\Session\Handlers\FileHandler' driver.
+DEBUG - 2025-09-20 06:04:28 --> Session: Class initialized using 'CodeIgniter\Session\Handlers\FileHandler' driver.
+DEBUG - 2025-09-20 06:07:56 --> Session: Class initialized using 'CodeIgniter\Session\Handlers\FileHandler' driver.
+DEBUG - 2025-09-20 06:07:57 --> Session: Class initialized using 'CodeIgniter\Session\Handlers\FileHandler' driver.

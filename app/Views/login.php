@@ -8,7 +8,7 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
         body {
-            background: #3c59dbff;
+            background: #99affdff;
             min-height: 100vh;
             display: flex;
             align-items: center;
@@ -112,6 +112,8 @@
             background: rgba(255,255,255,0.2);
             color: #333;
         }
+        .is-invalid { border-color: red !important; }
+        .error-msg { color: red; font-size: 0.9em; }
     </style>
 </head>
 <body>
@@ -157,6 +159,7 @@
                         <input type="email" name="email" id="email" class="form-control" 
                                value="<?= old('email') ?>" required placeholder="Masukkan email">
                     </div>
+                    <div class="error-msg" id="email_error"></div>
                 </div>
                 
                 <div class="mb-4">
@@ -169,6 +172,7 @@
                             <i class="fas fa-eye"></i>
                         </button>
                     </div>
+                    <div class="error-msg" id="password_error"></div>
                 </div>
                 
                 <div class="d-grid">
@@ -183,7 +187,6 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
     <script>
-        // Toggle password visibility
         document.getElementById('togglePassword').addEventListener('click', function() {
             const passwordField = document.getElementById('password');
             const toggleIcon = this.querySelector('i');
@@ -199,25 +202,33 @@
             }
         });
         
-        // Form validation
         document.getElementById('loginForm').addEventListener('submit', function(e) {
-            const email = document.getElementById('email').value.trim();
-            const password = document.getElementById('password').value.trim();
-            
-            if (!email || !password) {
-                e.preventDefault();
-                alert('Harap isi semua field');
-                return false;
+            const emailInput = document.getElementById('email');
+            const passwordInput = document.getElementById('password');
+            let valid = true;
+
+            document.getElementById('email_error').textContent = '';
+            document.getElementById('password_error').textContent = '';
+            emailInput.classList.remove('is-invalid');
+            passwordInput.classList.remove('is-invalid');
+
+            const email = emailInput.value.trim();
+            const password = passwordInput.value.trim();
+
+            if (!email || !email.includes('@')) {
+                document.getElementById('email_error').textContent = 'Email tidak valid';
+                emailInput.classList.add('is-invalid');
+                valid = false;
             }
-            
-            if (password.length < 6) {
-                e.preventDefault();
-                alert('Password harus minimal 6 karakter');
-                return false;
+            if (!password || password.length < 6) {
+                document.getElementById('password_error').textContent = 'Password harus minimal 6 karakter';
+                passwordInput.classList.add('is-invalid');
+                valid = false;
             }
+
+            if (!valid) e.preventDefault();
         });
         
-        // Auto-hide alerts
         setTimeout(function() {
             const alerts = document.querySelectorAll('.alert');
             alerts.forEach(function(alert) {

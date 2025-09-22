@@ -18,17 +18,21 @@ class StudentController extends Controller
         if (session()->get('role') !== 'admin') {
             return redirect()->to('/dashboard')->with('error', 'Access denied. Admin only.');
         }
-
-        try {
-            $data['students'] = $this->userModel->getStudents();
-            return view('students', $data);
-        } catch (\Exception $e) {
-            log_message('error', 'Error loading students: ' . $e->getMessage());
-            return redirect()->to('/dashboard')->with('error', 'Error loading student data');
-        }
+        
+        $data['students'] = $this->userModel->getStudents();
+        return view('students', $data);
     }
 
-    // CREATE - Tambah mahasiswa (Admin only)
+    public function getAll()
+    {
+        if (session()->get('role') !== 'admin') {
+            return $this->failUnauthorized('Access denied');
+        }
+        
+        $students = $this->userModel->getStudents();
+        return $this->respond($students);
+    }
+
     public function create()
     {
         if (session()->get('role') !== 'admin') {
@@ -45,16 +49,14 @@ class StudentController extends Controller
         ]);
 
         if (!$validation->withRequest($this->request)->run()) {
-            $errors = $validation->getErrors();
-            $errorMessage = implode(', ', $errors);
-            return redirect()->back()->with('error', 'Validation failed: ' . $errorMessage)->withInput();
+            return redirect()->back()->withInput()->with('errors', $validation->getErrors());
         }
 
         try {
             $userData = [
                 'username' => $this->request->getPost('username'),
                 'email' => $this->request->getPost('email'),
-                'password' => $this->request->getPost('password'), 
+                'password' => $this->request->getPost('password'), // Will be hashed in model
                 'role' => 'student',
                 'full_name' => $this->request->getPost('full_name')
             ];
@@ -63,55 +65,49 @@ class StudentController extends Controller
                 'entry_year' => $this->request->getPost('entry_year')
             ];
 
-            $userId = $this->userModel->createStudent($userData, $studentData);
-            
-            if ($userId) {
-                session()->setFlashdata('success', 'Mahasiswa berhasil ditambahkan');
-                log_message('debug', 'New student created with ID: ' . $userId);
+            if ($this->userModel->createStudent($userData, $studentData)) {
+                return redirect()->to('/students')->with('success', 'Mahasiswa berhasil ditambahkan');
             } else {
-                session()->setFlashdata('error', 'Gagal menambahkan mahasiswa');
+                return redirect()->back()->with('error', 'Gagal menambahkan mahasiswa');
             }
         } catch (\Exception $e) {
             log_message('error', 'Error creating student: ' . $e->getMessage());
-            session()->setFlashdata('error', 'System error: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'System error occurred: ' . $e->getMessage());
         }
-
-        return redirect()->to('/students');
     }
 
-    // UPDATE - Edit mahasiswa (Admin only)
     public function update()
     {
         if (session()->get('role') !== 'admin') {
-            return redirect()->to('/dashboard')->with('error', 'Access denied');
+            return $this->failUnauthorized('Access denied');
         }
 
         $userId = $this->request->getPost('user_id');
         
         if (!$userId || !is_numeric($userId)) {
-            return redirect()->back()->with('error', 'Invalid user ID');
+            return $this->fail('Invalid user ID');
         }
 
         $validation = \Config\Services::validation();
-      $validation->setRules([
-    'username' => 'required|min_length[3]|max_length[50]|is_unique[users.username]',
-    'email' => 'required|valid_email|is_unique[users.email]',
-    'password' => 'required|min_length[6]',
-    'full_name' => 'required|min_length[2]|max_length[100]',
-    'entry_year' => 'required|integer|greater_than_equal_to[2000]|less_than_equal_to[' . date('Y') . ']'  // Sudah benar di dokumen, tapi pastikan konsisten
-]);
+        $validation->setRules([
+            'username' => 'required|min_length[3]|max_length[50]|is_unique[users.username,user_id,' . $userId . ']',
+            'email' => 'required|valid_email|is_unique[users.email,user_id,' . $userId . ']',
+            'full_name' => 'required|min_length[2]|max_length[100]',
+            'entry_year' => 'required|integer|greater_than_equal_to[2000]|less_than_equal_to[' . date('Y') . ']'
+        ]);
+
+        if ($this->request->getPost('password')) {
+            $validation->setRule('password', 'min_length[6]');
+        }
 
         if (!$validation->withRequest($this->request)->run()) {
-            $errors = $validation->getErrors();
-            $errorMessage = implode(', ', $errors);
-            return redirect()->back()->with('error', 'Validation failed: ' . $errorMessage)->withInput();
+            return $this->failValidationErrors($validation->getErrors());
         }
 
         try {
-          
             $existingStudent = $this->userModel->find($userId);
             if (!$existingStudent || $existingStudent['role'] !== 'student') {
-                return redirect()->back()->with('error', 'Student not found');
+                return $this->failNotFound('Student not found');
             }
 
             $userData = [
@@ -120,10 +116,9 @@ class StudentController extends Controller
                 'full_name' => $this->request->getPost('full_name')
             ];
 
-
             $password = $this->request->getPost('password');
             if (!empty($password)) {
-                $userData['password'] = $password;
+                $userData['password'] = $password; // Will be hashed in model
             }
 
             $studentData = [
@@ -131,71 +126,61 @@ class StudentController extends Controller
             ];
 
             if ($this->userModel->updateStudent($userId, $userData, $studentData)) {
-                session()->setFlashdata('success', 'Data mahasiswa berhasil diperbarui');
-                log_message('debug', 'Student updated with ID: ' . $userId);
+                return $this->respond(['message' => 'Data mahasiswa berhasil diperbarui']);
             } else {
-                session()->setFlashdata('error', 'Gagal memperbarui data mahasiswa');
+                return $this->failServerError('Gagal memperbarui data mahasiswa');
             }
         } catch (\Exception $e) {
             log_message('error', 'Error updating student: ' . $e->getMessage());
-            session()->setFlashdata('error', 'System error: ' . $e->getMessage());
+            return $this->failServerError('System error: ' . $e->getMessage());
         }
-
-        return redirect()->to('/students');
     }
 
-    // DELETE - Hapus Mahasiswa (Admin only)
     public function delete($userId)
     {
         if (session()->get('role') !== 'admin') {
-            return redirect()->to('/dashboard')->with('error', 'Access denied');
+            return $this->failUnauthorized('Access denied');
         }
 
         if (!$userId || !is_numeric($userId)) {
-            return redirect()->to('/students')->with('error', 'Invalid user ID');
+            return $this->fail('Invalid user ID');
         }
 
         try {
-       
             $student = $this->userModel->find($userId);
             if (!$student || $student['role'] !== 'student') {
-                return redirect()->to('/students')->with('error', 'Mahasiswa tidak ditemukan');
+                return $this->failNotFound('Mahasiswa tidak ditemukan');
             }
 
             if ($userId == session()->get('user_id')) {
-                return redirect()->to('/students')->with('error', 'Tidak dapat menghapus akun yang sedang aktif');
+                return $this->fail('Tidak dapat menghapus akun yang sedang aktif');
             }
 
             if ($this->userModel->deleteStudent($userId)) {
-                session()->setFlashdata('success', 'Mahasiswa berhasil dihapus');
-                log_message('debug', 'Student deleted with ID: ' . $userId);
+                return $this->respondDeleted(['message' => 'Mahasiswa berhasil dihapus']);
             } else {
-                session()->setFlashdata('error', 'Gagal menghapus mahasiswa');
+                return $this->failServerError('Gagal menghapus mahasiswa');
             }
         } catch (\Exception $e) {
             log_message('error', 'Error deleting student: ' . $e->getMessage());
-            session()->setFlashdata('error', 'System error occurred');
+            return $this->failServerError('System error occurred');
         }
-
-        return redirect()->to('/students');
     }
 
-    // VIEW - Lihat detail mahasiswa dengan enrolled courses (Admin only)
     public function view($userId)
     {
         if (session()->get('role') !== 'admin') {
-            return redirect()->to('/dashboard')->with('error', 'Access denied');
+            return $this->failUnauthorized('Access denied');
         }
 
         if (!$userId || !is_numeric($userId)) {
-            return redirect()->to('/students')->with('error', 'Invalid user ID');
+            return $this->fail('Invalid user ID');
         }
 
         try {
-
             $student = $this->userModel->getStudentById($userId);
             if (!$student) {
-                return redirect()->to('/students')->with('error', 'Mahasiswa tidak ditemukan');
+                return $this->failNotFound('Mahasiswa tidak ditemukan');
             }
 
             $courseModel = new \App\Models\CourseModel();
@@ -206,24 +191,23 @@ class StudentController extends Controller
                 'enrolled_courses' => $enrolledCourses
             ];
 
-            return view('student_detail', $data);
+            return $this->respond($data);
         } catch (\Exception $e) {
             log_message('error', 'Error viewing student: ' . $e->getMessage());
-            return redirect()->to('/students')->with('error', 'Error loading student data');
+            return $this->failServerError('Error loading student data');
         }
     }
 
-    // BULK DELETE - Hapus multiple mahasiswa (Admin only)
     public function bulkDelete()
     {
         if (session()->get('role') !== 'admin') {
-            return redirect()->to('/dashboard')->with('error', 'Access denied');
+            return $this->failUnauthorized('Access denied');
         }
 
         $studentIds = $this->request->getPost('student_ids');
         
         if (!$studentIds || !is_array($studentIds)) {
-            return redirect()->back()->with('error', 'No students selected');
+            return $this->fail('No students selected');
         }
 
         try {
@@ -231,7 +215,6 @@ class StudentController extends Controller
             $currentUserId = session()->get('user_id');
 
             foreach ($studentIds as $userId) {
-          
                 if ($userId == $currentUserId) {
                     continue;
                 }
@@ -242,15 +225,13 @@ class StudentController extends Controller
             }
 
             if ($deletedCount > 0) {
-                session()->setFlashdata('success', "$deletedCount mahasiswa berhasil dihapus");
+                return $this->respond(['message' => "$deletedCount mahasiswa berhasil dihapus"]);
             } else {
-                session()->setFlashdata('error', 'Tidak ada mahasiswa yang dihapus');
+                return $this->fail('Tidak ada mahasiswa yang dihapus');
             }
         } catch (\Exception $e) {
             log_message('error', 'Error bulk deleting students: ' . $e->getMessage());
-            session()->setFlashdata('error', 'System error occurred');
+            return $this->failServerError('System error occurred');
         }
-
-        return redirect()->to('/students');
     }
 }
