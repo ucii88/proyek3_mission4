@@ -19,7 +19,7 @@ class AuthFilter implements FilterInterface
         if ($arguments) {
             $userRole = session()->get('role');
             
-        // Cek role user sesuai dengan yang diizinkan
+        
             if (!in_array($userRole, $arguments)) {
                 session()->setFlashdata('error', 'Access denied. Insufficient permissions.');
                 return redirect()->to(base_url('/dashboard'));

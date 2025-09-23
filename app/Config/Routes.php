@@ -11,7 +11,7 @@ $routes->get('/login', 'AuthController::loginForm');
 
 $routes->group('auth', function ($routes) {
     $routes->post('login', 'AuthController::login');
-    $routes->post('logout', 'AuthController::logout', ['filter' => 'auth']); // Ubah dari GET ke POST dan tambahkan filter auth
+    $routes->post('logout', 'AuthController::logout', ['filter' => 'auth']);
 });
 
 // Dashboard 
@@ -22,14 +22,16 @@ $routes->group('courses', ['filter' => 'auth'], function ($routes) {
     $routes->get('getAll', 'CourseController::getAll');
     $routes->post('create', 'CourseController::create');
     $routes->post('update', 'CourseController::update');
-    $routes->delete('delete/(:num)', 'CourseController::delete/$1');
-    $routes->post('enroll/(:num)', 'CourseController::enroll/$1');
+    $routes->post('delete/(:num)', 'CourseController::delete/$1');
+    $routes->get('enroll/(:num)', 'CourseController::enroll/$1');
     $routes->post('enrollMultiple', 'CourseController::enrollMultiple');
-    $routes->post('unenrollMultiple', 'CourseController::unenrollMultiple'); // Tambah unenroll multiple
-    $routes->delete('unenroll/(:num)', 'CourseController::unenroll/$1');
+    $routes->post('unenrollMultiple', 'CourseController::unenrollMultiple');
+    $routes->post('unenroll/(:num)', 'CourseController::unenroll/$1');
     $routes->get('detail/(:num)', 'CourseController::detail/$1');
     $routes->get('search', 'CourseController::search');
 });
+
+$routes->get('/mycourses', 'CourseController::mycourses', ['filter' => 'auth']);
 
 $routes->group('students', ['filter' => 'auth'], function ($routes) {
     $routes->get('/', 'StudentController::index');
@@ -42,6 +44,9 @@ $routes->group('students', ['filter' => 'auth'], function ($routes) {
 });
 
 $routes->group('api', ['filter' => 'auth'], function ($routes) {
+    $routes->get('students', 'StudentController::getAll');
+    $routes->get('courses', 'CourseController::getAll');
+    
     $routes->group('courses', function ($routes) {
         $routes->get('search', 'Api\\CourseController::search');
         $routes->get('(:num)/students', 'Api\\CourseController::getStudents/$1');

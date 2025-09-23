@@ -2,34 +2,51 @@
 namespace App\Controllers;
 
 use App\Models\CourseModel;
+use App\Models\UserModel;
 use CodeIgniter\Controller;
 
 class CourseController extends Controller
 {
     protected $courseModel;
+    protected $userModel;
 
     public function __construct()
     {
         $this->courseModel = new CourseModel();
+        $this->userModel = new UserModel();
     }
 
     public function index()
     {
         if (!session()->get('isLoggedIn')) {
-            return redirect()->to('/login');
+            return redirect()->to(base_url('/login'));
         }
 
+        $role = session()->get('role');
         $data['courses'] = $this->courseModel->getAllCourses();
-        $data['role'] = session()->get('role');  
 
-        if (session()->get('role') === 'student') {
-            $data['enrolled'] = $this->courseModel->getEnrolledCourses(session()->get('user_id'));
+        if ($role === 'student') {
+            $studentId = session()->get('user_id');
+            $data['enrolled'] = $this->courseModel->getEnrolledCourses($studentId);
+            $data['total_credits'] = $this->courseModel->getStudentTotalCredits($studentId);
         }
 
         return view('courses', $data);
     }
 
-    // CREATE - Tambah Mata Kuliah (Admin only)
+    public function mycourses()
+    {
+        if (!session()->get('isLoggedIn') || session()->get('role') !== 'student') {
+            return redirect()->to(base_url('/dashboard'));
+        }
+
+        $studentId = session()->get('user_id');
+        $data['enrolled_courses'] = $this->courseModel->getEnrolledCourses($studentId);
+        $data['total_credits'] = $this->courseModel->getStudentTotalCredits($studentId);
+
+        return view('mycourses', $data);
+    }
+
     public function create()
     {
         if (session()->get('role') !== 'admin') {
@@ -39,11 +56,11 @@ class CourseController extends Controller
         $validation = \Config\Services::validation();
         $validation->setRules([
             'course_name' => 'required|min_length[3]|max_length[100]',
-            'credits' => 'required|integer|greater_than[0]|less_than_equal_to[6]'  
+            'credits' => 'required|integer|greater_than[0]|less_than_equal_to[6]'
         ]);
 
         if (!$validation->withRequest($this->request)->run()) {
-            return redirect()->back()->with('error', 'Invalid input data')->withInput();
+            return redirect()->back()->withInput()->with('errors', $validation->getErrors());
         }
 
         try {
@@ -51,21 +68,18 @@ class CourseController extends Controller
                 'course_name' => $this->request->getPost('course_name'),
                 'credits' => $this->request->getPost('credits')
             ];
-            
+
             if ($this->courseModel->insert($data)) {
-                session()->setFlashdata('success', 'Mata kuliah berhasil ditambahkan');
+                return redirect()->to('/courses')->with('success', 'Mata kuliah berhasil ditambahkan');
             } else {
-                session()->setFlashdata('error', 'Gagal menambahkan mata kuliah');
+                return redirect()->back()->with('error', 'Gagal menambahkan mata kuliah');
             }
         } catch (\Exception $e) {
             log_message('error', 'Error creating course: ' . $e->getMessage());
-            session()->setFlashdata('error', 'System error occurred');
+            return redirect()->back()->with('error', 'Terjadi kesalahan sistem');
         }
-
-        return redirect()->to('/courses');
     }
 
-    // UPDATE - Edit Mata Kuliah (Admin only)
     public function update()
     {
         if (session()->get('role') !== 'admin') {
@@ -74,10 +88,6 @@ class CourseController extends Controller
 
         $courseId = $this->request->getPost('course_id');
         
-        if (!$courseId) {
-            return redirect()->back()->with('error', 'Invalid course ID');
-        }
-
         $validation = \Config\Services::validation();
         $validation->setRules([
             'course_name' => 'required|min_length[3]|max_length[100]',
@@ -85,7 +95,7 @@ class CourseController extends Controller
         ]);
 
         if (!$validation->withRequest($this->request)->run()) {
-            return redirect()->back()->with('error', 'Invalid input data')->withInput();
+            return redirect()->back()->withInput()->with('errors', $validation->getErrors());
         }
 
         try {
@@ -93,285 +103,175 @@ class CourseController extends Controller
                 'course_name' => $this->request->getPost('course_name'),
                 'credits' => $this->request->getPost('credits')
             ];
-            
+
             if ($this->courseModel->update($courseId, $data)) {
-                session()->setFlashdata('success', 'Mata kuliah berhasil diperbarui');
+                return redirect()->to('/courses')->with('success', 'Mata kuliah berhasil diperbarui');
             } else {
-                session()->setFlashdata('error', 'Gagal memperbarui mata kuliah');
+                return redirect()->back()->with('error', 'Gagal memperbarui mata kuliah');
             }
         } catch (\Exception $e) {
             log_message('error', 'Error updating course: ' . $e->getMessage());
-            session()->setFlashdata('error', 'System error occurred');
+            return redirect()->back()->with('error', 'Terjadi kesalahan sistem');
         }
-
-        return redirect()->to('/courses');
     }
 
-    // DELETE - Hapus Mata Kuliah (Admin only)
     public function delete($courseId)
     {
         if (session()->get('role') !== 'admin') {
             return redirect()->to('/dashboard')->with('error', 'Access denied');
         }
 
-        if (!$courseId || !is_numeric($courseId)) {
-            return redirect()->to('/courses')->with('error', 'Invalid course ID');
+        if (!$this->request->getPost('confirm_delete')) {
+            return redirect()->back()->with('error', 'Konfirmasi penghapusan diperlukan');
         }
 
         try {
-            $course = $this->courseModel->find($courseId);
-            if (!$course) {
-                return redirect()->to('/courses')->with('error', 'Mata kuliah tidak ditemukan');
-            }
-
+            
             $enrolledCount = $this->courseModel->getEnrolledStudentsCount($courseId);
             if ($enrolledCount > 0) {
-                return redirect()->to('/courses')->with('error', 'Tidak dapat menghapus mata kuliah yang masih memiliki mahasiswa terdaftar');
-            }
-
-            // Validasi server-side dengan konfirmasi dari modal
-            $confirm = $this->request->getPost('confirm_delete');
-            if (!$confirm || $confirm !== 'yes') {
-                return redirect()->to('/courses')->with('error', 'Konfirmasi penghapusan diperlukan. Silakan coba lagi.');
+                return redirect()->back()->with('error', 'Tidak dapat menghapus mata kuliah yang masih memiliki mahasiswa terdaftar');
             }
 
             if ($this->courseModel->delete($courseId)) {
-                session()->setFlashdata('success', 'Mata kuliah berhasil dihapus');
+                return redirect()->to('/courses')->with('success', 'Mata kuliah berhasil dihapus');
             } else {
-                session()->setFlashdata('error', 'Gagal menghapus mata kuliah');
+                return redirect()->back()->with('error', 'Gagal menghapus mata kuliah');
             }
         } catch (\Exception $e) {
             log_message('error', 'Error deleting course: ' . $e->getMessage());
-            session()->setFlashdata('error', 'System error occurred');
+            return redirect()->back()->with('error', 'Terjadi kesalahan sistem');
         }
-
-        return redirect()->to('/courses');
     }
 
-    // ENROLL - Mahasiswa enroll Mata Kuliah
     public function enroll($courseId)
     {
         if (session()->get('role') !== 'student') {
             return redirect()->to('/dashboard')->with('error', 'Access denied');
         }
 
-        if (!$courseId || !is_numeric($courseId)) {
-            return redirect()->to('/courses')->with('error', 'Invalid course ID');
-        }
+        $studentId = session()->get('user_id');
 
         try {
-            $studentId = session()->get('user_id');
-
-            $course = $this->courseModel->find($courseId);
-            if (!$course) {
-                return redirect()->to('/courses')->with('error', 'Mata kuliah tidak ditemukan');
-            }
-
+           
             if ($this->courseModel->isStudentEnrolled($studentId, $courseId)) {
-                return redirect()->to('/courses')->with('error', 'Anda sudah terdaftar di mata kuliah ini');
+                return redirect()->back()->with('error', 'Anda sudah terdaftar di mata kuliah ini');
             }
 
+            
             $currentCredits = $this->courseModel->getStudentTotalCredits($studentId);
+            $course = $this->courseModel->find($courseId);
+            
             if (($currentCredits + $course['credits']) > 24) {
-                return redirect()->to('/courses')->with('error', 
-                    'Tidak dapat mendaftar. Total SKS akan melebihi batas maksimum (24 SKS)');
+                return redirect()->back()->with('error', 'Total SKS akan melebihi batas maksimum 24 SKS');
             }
 
             if ($this->courseModel->enroll($studentId, $courseId)) {
-                session()->setFlashdata('success', 'Berhasil mendaftar mata kuliah: ' . $course['course_name']);
+                return redirect()->back()->with('success', 'Berhasil mendaftar mata kuliah');
             } else {
-                session()->setFlashdata('error', 'Gagal mendaftar mata kuliah');
+                return redirect()->back()->with('error', 'Gagal mendaftar mata kuliah');
             }
         } catch (\Exception $e) {
-            log_message('error', 'Error enrolling student: ' . $e->getMessage());
-            session()->setFlashdata('error', 'System error occurred');
+            log_message('error', 'Error enrolling course: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Terjadi kesalahan sistem');
         }
-
-        return redirect()->to('/courses');
     }
 
-    // ENROLL MULTIPLE - Mahasiswa enroll beberapa Mata Kuliah
-    public function enrollMultiple()
-    {
-        if (session()->get('role') !== 'student') {
-            return redirect()->to('/dashboard')->with('error', 'Access denied');
-        }
-
-        $courseIds = $this->request->getPost('course_ids');
-        if (!is_array($courseIds) || empty($courseIds)) {
-            return redirect()->to('/courses')->with('error', 'Pilih setidaknya satu mata kuliah');
-        }
-
-        try {
-            $studentId = session()->get('user_id');
-            $currentCredits = $this->courseModel->getStudentTotalCredits($studentId);
-            $newCredits = 0;
-
-            foreach ($courseIds as $courseId) {
-                $course = $this->courseModel->find($courseId);
-                if ($course && !$this->courseModel->isStudentEnrolled($studentId, $courseId)) {
-                    $newCredits += $course['credits'];
-                }
-            }
-
-            if (($currentCredits + $newCredits) > 24) {
-                return redirect()->to('/courses')->with('error', 'Total SKS melebihi batas maksimum (24 SKS)');
-            }
-
-            $successCount = 0;
-            foreach ($courseIds as $courseId) {
-                if ($this->courseModel->enroll($studentId, $courseId)) {
-                    $successCount++;
-                }
-            }
-
-            if ($successCount > 0) {
-                session()->setFlashdata('success', 'Berhasil mendaftar ' . $successCount . ' mata kuliah');
-            } else {
-                session()->setFlashdata('error', 'Gagal mendaftar mata kuliah');
-            }
-        } catch (\Exception $e) {
-            log_message('error', 'Error enrolling multiple courses: ' . $e->getMessage());
-            session()->setFlashdata('error', 'System error occurred');
-        }
-
-        return redirect()->to('/courses');
-    }
-
-    // UNENROLL - Mahasiswa batal enroll Mata Kuliah
     public function unenroll($courseId)
     {
         if (session()->get('role') !== 'student') {
             return redirect()->to('/dashboard')->with('error', 'Access denied');
         }
 
-        if (!$courseId || !is_numeric($courseId)) {
-            return redirect()->to('/courses')->with('error', 'Invalid course ID');
+        $studentId = session()->get('user_id');
+
+        try {
+            if ($this->courseModel->unenroll($studentId, $courseId)) {
+                return redirect()->back()->with('success', 'Berhasil membatalkan pendaftaran mata kuliah');
+            } else {
+                return redirect()->back()->with('error', 'Gagal membatalkan pendaftaran mata kuliah');
+            }
+        } catch (\Exception $e) {
+            log_message('error', 'Error unenrolling course: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Terjadi kesalahan sistem');
+        }
+    }
+
+    public function enrollMultiple()
+    {
+        if (session()->get('role') !== 'student') {
+            return redirect()->to('/dashboard')->with('error', 'Access denied');
+        }
+
+        $studentId = session()->get('user_id');
+        $courseIds = $this->request->getPost('course_ids');
+
+        if (!$courseIds || !is_array($courseIds)) {
+            return redirect()->back()->with('error', 'Pilih setidaknya satu mata kuliah');
         }
 
         try {
-            $studentId = session()->get('user_id');
-
-            $course = $this->courseModel->find($courseId);
-            if (!$course) {
-                return redirect()->to('/courses')->with('error', 'Mata kuliah tidak ditemukan');
+           
+            $currentCredits = $this->courseModel->getStudentTotalCredits($studentId);
+            $selectedCredits = 0;
+            
+            foreach ($courseIds as $courseId) {
+                $course = $this->courseModel->find($courseId);
+                $selectedCredits += $course['credits'];
             }
 
-            if (!$this->courseModel->isStudentEnrolled($studentId, $courseId)) {
-                return redirect()->to('/courses')->with('error', 'Anda tidak terdaftar di mata kuliah ini');
+            if (($currentCredits + $selectedCredits) > 24) {
+                return redirect()->back()->with('error', 'Total SKS akan melebihi batas maksimum 24 SKS');
             }
 
-            if ($this->courseModel->unenroll($studentId, $courseId)) {
-                session()->setFlashdata('success', 'Berhasil membatalkan pendaftaran mata kuliah: ' . $course['course_name']);
+            $successCount = $this->courseModel->enrollMultiple($studentId, $courseIds);
+            
+            if ($successCount > 0) {
+                return redirect()->back()->with('success', "Berhasil mendaftar {$successCount} mata kuliah");
             } else {
-                session()->setFlashdata('error', 'Gagal membatalkan pendaftaran mata kuliah');
+                return redirect()->back()->with('error', 'Gagal mendaftar mata kuliah atau sudah terdaftar semua');
             }
         } catch (\Exception $e) {
-            log_message('error', 'Error unenrolling student: ' . $e->getMessage());
-            session()->setFlashdata('error', 'System error occurred');
+            log_message('error', 'Error enrolling multiple courses: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Terjadi kesalahan sistem');
         }
-
-        return redirect()->to('/courses');
     }
 
-    // UNENROLL MULTIPLE - Mahasiswa batal enroll beberapa Mata Kuliah
     public function unenrollMultiple()
     {
         if (session()->get('role') !== 'student') {
             return redirect()->to('/dashboard')->with('error', 'Access denied');
         }
 
+        $studentId = session()->get('user_id');
         $courseIds = $this->request->getPost('course_ids');
-        if (!is_array($courseIds) || empty($courseIds)) {
-            return redirect()->to('/courses')->with('error', 'Pilih setidaknya satu mata kuliah untuk dibatalkan');
+
+        if (!$courseIds || !is_array($courseIds)) {
+            return redirect()->back()->with('error', 'Pilih setidaknya satu mata kuliah');
         }
 
         try {
-            $studentId = session()->get('user_id');
-            $successCount = 0;
-
-            foreach ($courseIds as $courseId) {
-                if ($this->courseModel->isStudentEnrolled($studentId, $courseId)) {
-                    if ($this->courseModel->unenroll($studentId, $courseId)) {
-                        $successCount++;
-                    }
-                }
-            }
-
+            $successCount = $this->courseModel->unenrollMultiple($studentId, $courseIds);
+            
             if ($successCount > 0) {
-                session()->setFlashdata('success', 'Berhasil membatalkan ' . $successCount . ' pendaftaran mata kuliah');
+                return redirect()->back()->with('success', "Berhasil membatalkan {$successCount} mata kuliah");
             } else {
-                session()->setFlashdata('error', 'Gagal membatalkan pendaftaran mata kuliah');
+                return redirect()->back()->with('error', 'Gagal membatalkan pendaftaran mata kuliah');
             }
         } catch (\Exception $e) {
             log_message('error', 'Error unenrolling multiple courses: ' . $e->getMessage());
-            session()->setFlashdata('error', 'System error occurred');
-        }
-
-        return redirect()->to('/courses');
-    }
-
-    // GET COURSE DETAIL - Tampilkan detail mata kuliah
-    public function detail($courseId)
-    {
-        if (!session()->get('isLoggedIn')) {
-            return redirect()->to('/login');
-        }
-
-        if (!$courseId || !is_numeric($courseId)) {
-            return redirect()->to('/courses')->with('error', 'Invalid course ID');
-        }
-
-        try {
-            $course = $this->courseModel->find($courseId);
-            if (!$course) {
-                return redirect()->to('/courses')->with('error', 'Mata kuliah tidak ditemukan');
-            }
-
-            $data['course'] = $course;
-            $data['role'] = session()->get('role');
-            
-            if (session()->get('role') === 'admin') {
-                $data['enrolled_students'] = $this->courseModel->getEnrolledStudentsByCourse($courseId);
-            }
- 
-            if (session()->get('role') === 'student') {
-                $data['is_enrolled'] = $this->courseModel->isStudentEnrolled(session()->get('user_id'), $courseId);
-            }
-
-            return view('course_detail', $data);
-        } catch (\Exception $e) {
-            log_message('error', 'Error getting course detail: ' . $e->getMessage());
-            return redirect()->to('/courses')->with('error', 'System error occurred');
+            return redirect()->back()->with('error', 'Terjadi kesalahan sistem');
         }
     }
 
-    // SEARCH COURSES - Pencarian mata kuliah
-    public function search()
+    
+    public function getAll()
     {
-        if (!session()->get('isLoggedIn')) {
-            return redirect()->to('/login');
-        }
-
-        $keyword = $this->request->getGet('keyword');
-        
-        if (empty($keyword)) {
-            return redirect()->to('/courses');
-        }
-
         try {
-            $data['courses'] = $this->courseModel->searchCourses($keyword);
-            $data['role'] = session()->get('role');
-            $data['keyword'] = $keyword;
-            
-            if (session()->get('role') === 'student') {
-                $data['enrolled'] = $this->courseModel->getEnrolledCourses(session()->get('user_id'));
-            }
-            
-            return view('courses', $data);
+            $courses = $this->courseModel->getAllCourses();
+            return $this->response->setJSON($courses);
         } catch (\Exception $e) {
-            log_message('error', 'Error searching courses: ' . $e->getMessage());
-            return redirect()->to('/courses')->with('error', 'System error occurred');
+            log_message('error', 'Error getting courses: ' . $e->getMessage());
+            return $this->response->setStatusCode(500)->setJSON(['error' => 'System error']);
         }
     }
 }

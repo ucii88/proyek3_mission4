@@ -2,15 +2,18 @@
 namespace App\Controllers;
 
 use App\Models\UserModel;
+use App\Models\CourseModel;
 use CodeIgniter\Controller;
 
 class StudentController extends Controller
 {
     protected $userModel;
+    protected $courseModel;
 
     public function __construct()
     {
         $this->userModel = new UserModel();
+        $this->courseModel = new CourseModel();
     }
 
     public function index()
@@ -26,212 +29,330 @@ class StudentController extends Controller
     public function getAll()
     {
         if (session()->get('role') !== 'admin') {
-            return $this->failUnauthorized('Access denied');
+            return $this->response->setStatusCode(403)->setJSON(['error' => 'Access denied']);
         }
         
-        $students = $this->userModel->getStudents();
-        return $this->respond($students);
+        try {
+            $students = $this->userModel->getStudents();
+            return $this->response->setJSON($students);
+        } catch (\Exception $e) {
+            log_message('error', 'Error getting students: ' . $e->getMessage());
+            return $this->response->setStatusCode(500)->setJSON(['error' => 'System error']);
+        }
     }
 
     public function create()
     {
+        // Log semua informasi untuk debugging
+        log_message('info', '=== CREATE STUDENT START ===');
+        log_message('info', 'Request Method: ' . $this->request->getMethod());
+        log_message('info', 'Content Type: ' . $this->request->getHeaderLine('Content-Type'));
+        log_message('info', 'Is AJAX: ' . ($this->request->isAJAX() ? 'yes' : 'no'));
+        log_message('info', 'Session Role: ' . session()->get('role'));
+
         if (session()->get('role') !== 'admin') {
-            return redirect()->to('/dashboard')->with('error', 'Access denied');
+            return $this->response->setStatusCode(403)->setJSON(['error' => 'Akses ditolak. Hanya admin.']);
         }
 
-        $validation = \Config\Services::validation();
-        $validation->setRules([
-            'username' => 'required|min_length[3]|max_length[50]|is_unique[users.username]',
-            'email' => 'required|valid_email|is_unique[users.email]',
-            'password' => 'required|min_length[6]',
-            'full_name' => 'required|min_length[2]|max_length[100]',
-            'entry_year' => 'required|integer|greater_than_equal_to[2000]|less_than_equal_to[' . date('Y') . ']'
-        ]);
+        // Debug: Cek semua input yang masuk
+        $rawInput = file_get_contents('php://input');
+        log_message('info', 'Raw Input: ' . $rawInput);
+        
+        $postData = $this->request->getPost();
+        log_message('info', 'POST data: ' . json_encode($postData));
+        
+        $jsonData = $this->request->getJSON(true);
+        log_message('info', 'JSON data: ' . json_encode($jsonData));
 
-        if (!$validation->withRequest($this->request)->run()) {
-            return redirect()->back()->withInput()->with('errors', $validation->getErrors());
+        // Ambil input dengan prioritas JSON, fallback ke POST
+        $input = [];
+        if (!empty($jsonData)) {
+            $input = $jsonData;
+            log_message('info', 'Using JSON data');
+        } elseif (!empty($postData)) {
+            $input = $postData;
+            log_message('info', 'Using POST data');
+        } else {
+            log_message('error', 'No input data found');
+            return $this->response->setStatusCode(400)->setJSON(['error' => 'No input data']);
         }
+
+        log_message('info', 'Final input: ' . json_encode($input));
+
+        // Cek password secara eksplisit
+        if (!isset($input['password'])) {
+            log_message('error', 'Password key not found in input');
+            return $this->response->setStatusCode(400)->setJSON(['error' => 'Password key not found']);
+        }
+
+        if (empty($input['password'])) {
+            log_message('error', 'Password is empty');
+            return $this->response->setStatusCode(400)->setJSON(['error' => 'Password cannot be empty']);
+        }
+
+        log_message('info', 'Password found: ' . (strlen($input['password']) . ' characters'));
+
+        // Validasi sederhana tanpa rules kompleks dulu
+        $requiredFields = ['username', 'email', 'password', 'full_name', 'entry_year'];
+        $missingFields = [];
+        
+        foreach ($requiredFields as $field) {
+            if (!isset($input[$field]) || empty($input[$field])) {
+                $missingFields[] = $field;
+            }
+        }
+
+        if (!empty($missingFields)) {
+            log_message('error', 'Missing fields: ' . implode(', ', $missingFields));
+            return $this->response->setStatusCode(400)->setJSON([
+                'error' => 'Missing required fields: ' . implode(', ', $missingFields)
+            ]);
+        }
+
+        // Cek email format
+        if (!filter_var($input['email'], FILTER_VALIDATE_EMAIL)) {
+            return $this->response->setStatusCode(400)->setJSON(['error' => 'Invalid email format']);
+        }
+
+        // Cek entry_year
+        if (!is_numeric($input['entry_year']) || $input['entry_year'] < 2000 || $input['entry_year'] > date('Y')) {
+            return $this->response->setStatusCode(400)->setJSON(['error' => 'Invalid entry year']);
+        }
+
+        // Siapkan data
+        $userData = [
+            'username' => trim($input['username']),
+            'email' => trim($input['email']),
+            'password' => $input['password'], // Jangan trim password!
+            'role' => 'student',
+            'full_name' => trim($input['full_name'])
+        ];
+
+        $studentData = [
+            'entry_year' => (int)$input['entry_year']
+        ];
+
+        log_message('info', 'User data prepared: ' . json_encode([
+            'username' => $userData['username'],
+            'email' => $userData['email'],
+            'password_length' => strlen($userData['password']),
+            'role' => $userData['role'],
+            'full_name' => $userData['full_name']
+        ]));
+
+        log_message('info', 'Student data prepared: ' . json_encode($studentData));
 
         try {
-            $userData = [
-                'username' => $this->request->getPost('username'),
-                'email' => $this->request->getPost('email'),
-                'password' => $this->request->getPost('password'), // Will be hashed in model
-                'role' => 'student',
-                'full_name' => $this->request->getPost('full_name')
-            ];
-
-            $studentData = [
-                'entry_year' => $this->request->getPost('entry_year')
-            ];
-
-            if ($this->userModel->createStudent($userData, $studentData)) {
-                return redirect()->to('/students')->with('success', 'Mahasiswa berhasil ditambahkan');
+            $userId = $this->userModel->createStudent($userData, $studentData);
+            
+            if ($userId) {
+                log_message('info', 'Student created successfully with ID: ' . $userId);
+                return $this->response->setJSON([
+                    'success' => true,
+                    'message' => 'Mahasiswa berhasil ditambahkan',
+                    'student_id' => $userId
+                ]);
             } else {
-                return redirect()->back()->with('error', 'Gagal menambahkan mahasiswa');
+                log_message('error', 'createStudent returned false/null');
+                return $this->response->setStatusCode(500)->setJSON(['error' => 'Gagal menambahkan mahasiswa']);
             }
+            
         } catch (\Exception $e) {
-            log_message('error', 'Error creating student: ' . $e->getMessage());
-            return redirect()->back()->with('error', 'System error occurred: ' . $e->getMessage());
+            log_message('error', 'Exception in create: ' . $e->getMessage());
+            log_message('error', 'Stack trace: ' . $e->getTraceAsString());
+            
+            return $this->response->setStatusCode(500)->setJSON([
+                'error' => 'Error sistem: ' . $e->getMessage(),
+                'debug' => $e->getTraceAsString()
+            ]);
+        } finally {
+            log_message('info', '=== CREATE STUDENT END ===');
         }
     }
 
+    // Methods lainnya tetap sama...
     public function update()
     {
         if (session()->get('role') !== 'admin') {
-            return $this->failUnauthorized('Access denied');
+            return $this->response->setStatusCode(403)->setJSON(['error' => 'Access denied']);
         }
 
-        $userId = $this->request->getPost('user_id');
+        $input = $this->request->getJSON(true) ?? $this->request->getPost();
+        $userId = $input['user_id'] ?? null;
         
         if (!$userId || !is_numeric($userId)) {
-            return $this->fail('Invalid user ID');
+            return $this->response->setStatusCode(400)->setJSON(['error' => 'Invalid user ID']);
         }
 
         $validation = \Config\Services::validation();
         $validation->setRules([
-            'username' => 'required|min_length[3]|max_length[50]|is_unique[users.username,user_id,' . $userId . ']',
-            'email' => 'required|valid_email|is_unique[users.email,user_id,' . $userId . ']',
+            'username' => "required|min_length[3]|max_length[50]|is_unique[users.username,user_id,{$userId}]",
+            'email' => "required|valid_email|is_unique[users.email,user_id,{$userId}]",
             'full_name' => 'required|min_length[2]|max_length[100]',
             'entry_year' => 'required|integer|greater_than_equal_to[2000]|less_than_equal_to[' . date('Y') . ']'
         ]);
 
-        if ($this->request->getPost('password')) {
+        if (!empty($input['password'])) {
             $validation->setRule('password', 'min_length[6]');
         }
 
-        if (!$validation->withRequest($this->request)->run()) {
-            return $this->failValidationErrors($validation->getErrors());
+        if (!$validation->run($input)) {
+            return $this->response->setStatusCode(400)->setJSON([
+                'error' => 'Validation failed',
+                'errors' => $validation->getErrors()
+            ]);
         }
 
         try {
             $existingStudent = $this->userModel->find($userId);
             if (!$existingStudent || $existingStudent['role'] !== 'student') {
-                return $this->failNotFound('Student not found');
+                return $this->response->setStatusCode(404)->setJSON(['error' => 'Student not found']);
             }
 
             $userData = [
-                'username' => $this->request->getPost('username'),
-                'email' => $this->request->getPost('email'),
-                'full_name' => $this->request->getPost('full_name')
+                'username' => $input['username'],
+                'email' => $input['email'],
+                'full_name' => $input['full_name']
             ];
 
-            $password = $this->request->getPost('password');
-            if (!empty($password)) {
-                $userData['password'] = $password; // Will be hashed in model
+            if (!empty($input['password'])) {
+                $userData['password'] = $input['password'];
             }
 
             $studentData = [
-                'entry_year' => $this->request->getPost('entry_year')
+                'entry_year' => $input['entry_year']
             ];
 
             if ($this->userModel->updateStudent($userId, $userData, $studentData)) {
-                return $this->respond(['message' => 'Data mahasiswa berhasil diperbarui']);
+                return $this->response->setJSON([
+                    'success' => true,
+                    'message' => 'Data mahasiswa berhasil diperbarui'
+                ]);
             } else {
-                return $this->failServerError('Gagal memperbarui data mahasiswa');
+                return $this->response->setStatusCode(500)->setJSON(['error' => 'Gagal memperbarui data mahasiswa']);
             }
         } catch (\Exception $e) {
             log_message('error', 'Error updating student: ' . $e->getMessage());
-            return $this->failServerError('System error: ' . $e->getMessage());
+            return $this->response->setStatusCode(500)->setJSON(['error' => 'System error: ' . $e->getMessage()]);
         }
     }
 
     public function delete($userId)
     {
         if (session()->get('role') !== 'admin') {
-            return $this->failUnauthorized('Access denied');
+            return $this->response->setStatusCode(403)->setJSON(['error' => 'Access denied']);
         }
 
         if (!$userId || !is_numeric($userId)) {
-            return $this->fail('Invalid user ID');
+            return $this->response->setStatusCode(400)->setJSON(['error' => 'Invalid user ID']);
         }
 
         try {
             $student = $this->userModel->find($userId);
             if (!$student || $student['role'] !== 'student') {
-                return $this->failNotFound('Mahasiswa tidak ditemukan');
+                return $this->response->setStatusCode(404)->setJSON(['error' => 'Mahasiswa tidak ditemukan']);
             }
 
             if ($userId == session()->get('user_id')) {
-                return $this->fail('Tidak dapat menghapus akun yang sedang aktif');
+                return $this->response->setStatusCode(400)->setJSON(['error' => 'Tidak dapat menghapus akun yang sedang aktif']);
             }
 
             if ($this->userModel->deleteStudent($userId)) {
-                return $this->respondDeleted(['message' => 'Mahasiswa berhasil dihapus']);
+                return $this->response->setJSON([
+                    'success' => true,
+                    'message' => 'Mahasiswa berhasil dihapus'
+                ]);
             } else {
-                return $this->failServerError('Gagal menghapus mahasiswa');
+                return $this->response->setStatusCode(500)->setJSON(['error' => 'Gagal menghapus mahasiswa']);
             }
         } catch (\Exception $e) {
             log_message('error', 'Error deleting student: ' . $e->getMessage());
-            return $this->failServerError('System error occurred');
+            return $this->response->setStatusCode(500)->setJSON(['error' => 'System error occurred']);
         }
     }
 
     public function view($userId)
     {
         if (session()->get('role') !== 'admin') {
-            return $this->failUnauthorized('Access denied');
+            return $this->response->setStatusCode(403)->setJSON(['error' => 'Access denied']);
         }
 
         if (!$userId || !is_numeric($userId)) {
-            return $this->fail('Invalid user ID');
+            return $this->response->setStatusCode(400)->setJSON(['error' => 'Invalid user ID']);
         }
 
         try {
             $student = $this->userModel->getStudentById($userId);
             if (!$student) {
-                return $this->failNotFound('Mahasiswa tidak ditemukan');
+                return $this->response->setStatusCode(404)->setJSON(['error' => 'Mahasiswa tidak ditemukan']);
             }
 
-            $courseModel = new \App\Models\CourseModel();
-            $enrolledCourses = $courseModel->getEnrolledCourses($userId);
+            $enrolledCourses = $this->courseModel->getEnrolledCourses($userId);
 
             $data = [
                 'student' => $student,
                 'enrolled_courses' => $enrolledCourses
             ];
 
-            return $this->respond($data);
+            return $this->response->setJSON($data);
         } catch (\Exception $e) {
             log_message('error', 'Error viewing student: ' . $e->getMessage());
-            return $this->failServerError('Error loading student data');
+            return $this->response->setStatusCode(500)->setJSON(['error' => 'Error loading student data']);
         }
     }
 
     public function bulkDelete()
     {
         if (session()->get('role') !== 'admin') {
-            return $this->failUnauthorized('Access denied');
+            return $this->response->setStatusCode(403)->setJSON(['error' => 'Access denied']);
         }
 
-        $studentIds = $this->request->getPost('student_ids');
+        $input = $this->request->getJSON(true) ?? $this->request->getPost();
+        $studentIds = $input['student_ids'] ?? [];
         
         if (!$studentIds || !is_array($studentIds)) {
-            return $this->fail('No students selected');
+            return $this->response->setStatusCode(400)->setJSON(['error' => 'No students selected']);
         }
 
         try {
             $deletedCount = 0;
             $currentUserId = session()->get('user_id');
+            $errors = [];
 
             foreach ($studentIds as $userId) {
                 if ($userId == $currentUserId) {
+                    $errors[] = "Cannot delete active account (ID: {$userId})";
                     continue;
                 }
 
                 if (is_numeric($userId) && $this->userModel->deleteStudent($userId)) {
                     $deletedCount++;
+                } else {
+                    $errors[] = "Failed to delete student ID: {$userId}";
                 }
             }
 
+            $response = ['deleted_count' => $deletedCount];
+            
             if ($deletedCount > 0) {
-                return $this->respond(['message' => "$deletedCount mahasiswa berhasil dihapus"]);
-            } else {
-                return $this->fail('Tidak ada mahasiswa yang dihapus');
+                $response['message'] = "{$deletedCount} mahasiswa berhasil dihapus";
             }
+            
+            if (!empty($errors)) {
+                $response['errors'] = $errors;
+            }
+            
+            if ($deletedCount === 0) {
+                return $this->response->setStatusCode(400)->setJSON([
+                    'error' => 'Tidak ada mahasiswa yang dihapus',
+                    'errors' => $errors
+                ]);
+            }
+
+            return $this->response->setJSON($response);
         } catch (\Exception $e) {
             log_message('error', 'Error bulk deleting students: ' . $e->getMessage());
-            return $this->failServerError('System error occurred');
+            return $this->response->setStatusCode(500)->setJSON(['error' => 'System error occurred']);
         }
     }
 }

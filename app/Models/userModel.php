@@ -12,7 +12,10 @@ class UserModel extends Model
     protected $createdField = 'created_at';
     protected $updatedField = 'updated_at';
 
-    // Validation rules
+    
+    protected $skipValidation = false; 
+
+   
     protected $validationRules = [
         'username' => 'required|is_unique[users.username]|min_length[3]|max_length[50]',
         'email' => 'required|valid_email|is_unique[users.email]',
@@ -74,38 +77,54 @@ class UserModel extends Model
     public function createStudent($userData, $studentData)
     {
         $this->db->transStart();
-        
         try {
-            // Hash password jika belum di-hash
-            if (isset($userData['password']) && !empty($userData['password'])) {
-                $userData['password'] = password_hash($userData['password'], PASSWORD_DEFAULT);
+            log_message('info', 'Data diterima di createStudent: ' . json_encode($userData));
+            
+            
+            if (!isset($userData['password']) || empty($userData['password'])) {
+                log_message('error', 'Password kosong atau tidak ada');
+                throw new \Exception('Password is required');
             }
             
-            // Insert ke tabel users
-            if (!$this->insert($userData)) {
-                throw new \Exception('Failed to create user: ' . implode(', ', $this->errors()));
+           
+            $userData['password'] = password_hash($userData['password'], PASSWORD_DEFAULT);
+            log_message('info', 'Password berhasil di-hash');
+            
+            
+            $this->skipValidation(true);
+            if (!$this->insert($userData, false)) { 
+                $errors = $this->errors();
+                log_message('error', 'Gagal insert user: ' . json_encode($errors));
+                throw new \Exception('Failed to create user: ' . implode(', ', $errors));
             }
             
             $userId = $this->insertID();
-            $studentData['student_id'] = $userId;
+            log_message('info', 'User berhasil dibuat dengan ID: ' . $userId);
             
-            // Insert ke tabel students
+        
+            $studentData['student_id'] = $userId;
             if (!$this->db->table('students')->insert($studentData)) {
+                $dbError = $this->db->error();
+                log_message('error', 'Gagal insert student record: ' . json_encode($dbError));
                 throw new \Exception('Failed to create student record');
             }
             
             $this->db->transComplete();
-            
             if ($this->db->transStatus() === false) {
+                log_message('error', 'Transaksi gagal');
                 throw new \Exception('Transaction failed');
             }
             
+            log_message('info', 'Mahasiswa berhasil dibuat. ID: ' . $userId);
             return $userId;
             
         } catch (\Exception $e) {
             $this->db->transRollback();
-            log_message('error', 'Error creating student: ' . $e->getMessage());
+            log_message('error', 'Error di createStudent: ' . $e->getMessage());
             throw $e;
+        } finally {
+     
+            $this->skipValidation(false);
         }
     }
 
@@ -114,20 +133,23 @@ class UserModel extends Model
         $this->db->transStart();
         
         try {
-            // Hash password jika ada dan tidak kosong
+            
             if (isset($userData['password']) && !empty($userData['password'])) {
                 $userData['password'] = password_hash($userData['password'], PASSWORD_DEFAULT);
             } else {
-                // Hapus password dari data update jika kosong
+                
                 unset($userData['password']);
             }
             
+            
+            $this->skipValidation(true);
+            
             // Update tabel users
-            if (!$this->update($userId, $userData)) {
+            if (!$this->update($userId, $userData, false)) { 
                 throw new \Exception('Failed to update user: ' . implode(', ', $this->errors()));
             }
             
-            // Update tabel students jika ada data student
+            
             if ($studentData && is_array($studentData)) {
                 if (!$this->db->table('students')->where('student_id', $userId)->update($studentData)) {
                     throw new \Exception('Failed to update student record');
@@ -141,6 +163,9 @@ class UserModel extends Model
             $this->db->transRollback();
             log_message('error', 'Error updating student: ' . $e->getMessage());
             throw $e;
+        } finally {
+           
+            $this->skipValidation(false);
         }
     }
 
@@ -149,13 +174,13 @@ class UserModel extends Model
         $this->db->transStart();
         
         try {
-            // Hapus data enrollments (takes) terlebih dahulu
+          
             $this->db->table('takes')->where('student_id', $userId)->delete();
             
-            // Hapus data students
+          
             $this->db->table('students')->where('student_id', $userId)->delete();
             
-            // Hapus data users
+           
             $this->delete($userId);
             
             $this->db->transComplete();

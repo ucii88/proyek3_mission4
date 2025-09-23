@@ -37,14 +37,21 @@ class AuthController extends Controller
                 return redirect()->back()->with('error', 'Email atau password salah.');
             }
 
-            session()->set([
+            $sessionData = [
                 'isLoggedIn' => true,
                 'user_id' => $user['user_id'],
                 'full_name' => $user['full_name'],
                 'role' => $user['role'],
                 'email' => $user['email']
-            ]);
+            ];
 
+            // Tambahkan entry_year untuk student
+            if ($user['role'] === 'student') {
+                $student = $this->userModel->getStudentById($user['user_id']);
+                $sessionData['entry_year'] = $student['entry_year'] ?? date('Y');
+            }
+
+            session()->set($sessionData);
             return redirect()->to($user['role'] === 'admin' ? '/dashboard' : '/courses');
         } catch (\Exception $e) {
             log_message('error', 'Error during login: ' . $e->getMessage());

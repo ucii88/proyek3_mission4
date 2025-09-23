@@ -8,11 +8,12 @@ class CourseModel extends Model
     protected $table = 'courses';
     protected $primaryKey = 'course_id';
     protected $allowedFields = ['course_name', 'credits'];
+    protected $returnType = 'array'; 
     protected $useTimestamps = true;
     protected $createdField = 'created_at';
     protected $updatedField = 'updated_at';
 
-    // Validation rules
+ 
     protected $validationRules = [
         'course_name' => 'required|min_length[3]|max_length[100]',
         'credits' => 'required|integer|greater_than[0]|less_than_equal_to[6]' 
@@ -28,7 +29,7 @@ class CourseModel extends Model
             'required' => 'Credits is required',
             'integer' => 'Credits must be a number',
             'greater_than' => 'Credits must be greater than 0',
-            'less_than_equal' => 'Credits cannot exceed 6'
+            'less_than_equal_to' => 'Credits cannot exceed 6'
         ]
     ];
 
@@ -48,7 +49,7 @@ class CourseModel extends Model
             $data = [
                 'student_id' => $studentId,
                 'course_id' => $courseId,
-                'enroll_date' => date('Y-m-d')
+                'enroll_date' => date('Y-m-d H:i:s') 
             ];
             return $this->db->table('takes')->insert($data);
         } catch (\Exception $e) {
@@ -83,7 +84,7 @@ class CourseModel extends Model
     public function getEnrolledCourses($studentId)
     {
         return $this->db->table('takes')
-            ->select('courses.*, takes.enroll_date')
+            ->select('courses.course_id, courses.course_name, courses.credits, takes.enroll_date')
             ->join('courses', 'courses.course_id = takes.course_id')
             ->where('takes.student_id', $studentId)
             ->orderBy('takes.enroll_date', 'DESC')
@@ -94,9 +95,8 @@ class CourseModel extends Model
     public function getEnrolledStudents($courseId)
     {
         return $this->db->table('takes')
-            ->select('users.user_id, users.full_name, users.email, students.entry_year, takes.enroll_date')
+            ->select('users.user_id, users.full_name, users.email, users.entry_year, takes.enroll_date')
             ->join('users', 'users.user_id = takes.student_id')
-            ->join('students', 'students.student_id = takes.student_id')
             ->where('takes.course_id', $courseId)
             ->orderBy('takes.enroll_date', 'DESC')
             ->get()
@@ -122,150 +122,7 @@ class CourseModel extends Model
         return $result['total_credits'] ? (int)$result['total_credits'] : 0;
     }
 
-    public function getEnrolledStudentsByCourse($courseId)
-    {
-        return $this->db->table('takes')
-            ->select('users.user_id, users.full_name, users.email, students.entry_year, takes.enroll_date')
-            ->join('users', 'users.user_id = takes.student_id')
-            ->join('students', 'students.student_id = takes.student_id')
-            ->where('takes.course_id', $courseId)
-            ->orderBy('users.full_name', 'ASC')
-            ->get()
-            ->getResultArray();
-    }
-
-    public function getTotalCoursesCount()
-    {
-        return $this->countAll();
-    }
-
-    public function getCourseWithMostStudents()
-    {
-        return $this->db->table('courses')
-            ->select('courses.*, COUNT(takes.student_id) as student_count')
-            ->join('takes', 'takes.course_id = courses.course_id', 'left')
-            ->groupBy('courses.course_id')
-            ->orderBy('student_count', 'DESC')
-            ->limit(1)
-            ->get()
-            ->getRowArray();
-    }
-
-    public function getCoursesWithEnrollmentCount()
-    {
-        return $this->db->table('courses')
-            ->select('courses.*, COUNT(takes.student_id) as student_count')
-            ->join('takes', 'takes.course_id = courses.course_id', 'left')
-            ->groupBy('courses.course_id')
-            ->orderBy('courses.course_name', 'ASC')
-            ->get()
-            ->getResultArray();
-    }
-
-    public function searchCourses($keyword)
-    {
-        return $this->like('course_name', $keyword)
-            ->orderBy('course_name', 'ASC')
-            ->findAll();
-    }
-
-    public function getCoursesByCredits($credits)
-    {
-        return $this->where('credits', $credits)
-            ->orderBy('course_name', 'ASC')
-            ->findAll();
-    }
-
-    public function courseExists($courseId)
-    {
-        return $this->find($courseId) !== null;
-    }
-
-    public function courseNameExists($courseName, $excludeId = null)
-    {
-        $query = $this->where('course_name', $courseName);
-        
-        if ($excludeId) {
-            $query->where('course_id !=', $excludeId);
-        }
-        
-        return $query->first() !== null;
-    }
-
-    public function bulkDelete($courseIds)
-    {
-        if (!is_array($courseIds) || empty($courseIds)) {
-            return false;
-        }
-
-        try {
-            $this->db->transStart();
-            
-            // Hapus data takes terlebih dahulu
-            $this->db->table('takes')->whereIn('course_id', $courseIds)->delete();
-            
-            // Hapus courses
-            $this->whereIn('course_id', $courseIds)->delete();
-            
-            $this->db->transComplete();
-            return $this->db->transStatus();
-        } catch (\Exception $e) {
-            $this->db->transRollback();
-            log_message('error', 'Error bulk deleting courses: ' . $e->getMessage());
-            return false;
-        }
-    }
-
-    public function getEnrollmentReport()
-    {
-        return $this->db->query("
-            SELECT 
-                c.course_name,
-                c.credits,
-                COUNT(t.student_id) as total_students,
-                MIN(t.enroll_date) as first_enrollment,
-                MAX(t.enroll_date) as latest_enrollment
-            FROM courses c
-            LEFT JOIN takes t ON c.course_id = t.course_id
-            GROUP BY c.course_id, c.course_name, c.credits
-            ORDER BY total_students DESC, c.course_name ASC
-        ")->getResultArray();
-    }
-
-    public function getMonthlyEnrollmentStats($year = null)
-    {
-        if (!$year) {
-            $year = date('Y');
-        }
-
-        return $this->db->query("
-            SELECT 
-                MONTH(t.enroll_date) as month,
-                MONTHNAME(t.enroll_date) as month_name,
-                COUNT(*) as enrollment_count
-            FROM takes t
-            WHERE YEAR(t.enroll_date) = ?
-            GROUP BY MONTH(t.enroll_date), MONTHNAME(t.enroll_date)
-            ORDER BY MONTH(t.enroll_date)
-        ", [$year])->getResultArray();
-    }
-
-    public function deleteWithCheck($courseId)
-    {
-        try {
-            $enrolledCount = $this->getEnrolledStudentsCount($courseId);
-            
-            if ($enrolledCount > 0) {
-                throw new \Exception("Cannot delete course with enrolled students");
-            }
-
-            return $this->delete($courseId);
-        } catch (\Exception $e) {
-            log_message('error', 'Error deleting course with check: ' . $e->getMessage());
-            throw $e;
-        }
-    }
-
+    
     public function enrollMultiple($studentId, $courseIds)
     {
         if (!is_array($courseIds) || empty($courseIds)) {
@@ -281,7 +138,7 @@ class CourseModel extends Model
                     $data = [
                         'student_id' => $studentId,
                         'course_id' => $courseId,
-                        'enroll_date' => date('Y-m-d')
+                        'enroll_date' => date('Y-m-d H:i:s')
                     ];
                     if ($this->db->table('takes')->insert($data)) {
                         $successCount++;
