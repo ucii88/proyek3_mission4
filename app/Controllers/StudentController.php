@@ -23,7 +23,7 @@ class StudentController extends Controller
         }
         
         $data['students'] = $this->userModel->getStudents();
-        return view('students', $data);
+        return view('students/students_common', $data);
     }
 
     public function getAll()
@@ -109,21 +109,20 @@ class StudentController extends Controller
             ]);
         }
 
-        // Cek email format
+       
         if (!filter_var($input['email'], FILTER_VALIDATE_EMAIL)) {
             return $this->response->setStatusCode(400)->setJSON(['error' => 'Invalid email format']);
         }
 
-        // Cek entry_year
+       
         if (!is_numeric($input['entry_year']) || $input['entry_year'] < 2000 || $input['entry_year'] > date('Y')) {
             return $this->response->setStatusCode(400)->setJSON(['error' => 'Invalid entry year']);
         }
 
-        // Siapkan data
         $userData = [
             'username' => trim($input['username']),
             'email' => trim($input['email']),
-            'password' => $input['password'], // Jangan trim password!
+            'password' => $input['password'], 
             'role' => 'student',
             'full_name' => trim($input['full_name'])
         ];
@@ -170,7 +169,7 @@ class StudentController extends Controller
         }
     }
 
-    // Methods lainnya tetap sama...
+    
     public function update()
     {
         if (session()->get('role') !== 'admin') {

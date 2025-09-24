@@ -7,7 +7,6 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     
-    <!-- UNIVERSAL BROWSER DIALOG BLOCKER - LOAD FIRST! -->
     <script>
         (function() {
             'use strict';
@@ -80,7 +79,6 @@
     </style>
 </head>
 <body>
-    <!-- Navigation -->
     <nav class="navbar navbar-expand-lg navbar-light bg-white">
         <div class="container">
             <a class="navbar-brand fw-bold text-primary" href="<?= base_url('/dashboard') ?>">
@@ -145,7 +143,6 @@
             </div>
         <?php endif; ?>
 
-        <!-- Page Header -->
         <div class="page-header">
             <div class="row align-items-center">
                 <div class="col-md-8">
@@ -175,7 +172,6 @@
                 </a>
             </div>
         <?php else: ?>
-            <!-- Form untuk Unenroll Multiple -->
             <div class="card mb-4">
                 <div class="card-header">
                     <h5><i class="fas fa-times-circle me-2"></i>Batalkan Pendaftaran Mata Kuliah</h5>
@@ -216,7 +212,6 @@
                 </div>
             </div>
 
-            <!-- Daftar Mata Kuliah yang Diambil -->
             <div class="card">
                 <div class="card-header">
                     <h5><i class="fas fa-list me-2"></i>Mata Kuliah yang Diambil</h5>
@@ -258,7 +253,6 @@
         <?php endif; ?>
     </div>
 
-    <!-- Generic Confirmation Modal -->
     <div class="modal fade" id="genericConfirmModal" tabindex="-1">
         <div class="modal-dialog">
             <div class="modal-content">
@@ -279,7 +273,6 @@
         </div>
     </div>
 
-    <!-- Modal Confirm Multiple Unenroll -->
     <div class="modal fade" id="multipleUnenrollModal" tabindex="-1">
         <div class="modal-dialog">
             <div class="modal-content">
@@ -354,7 +347,6 @@
         </div>
     </div>
 
-    <!-- Modal Logout -->
     <div class="modal fade" id="logoutModal" tabindex="-1">
         <div class="modal-dialog">
             <div class="modal-content">

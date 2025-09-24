@@ -363,7 +363,7 @@
             }
         });
 
-        // Form validation
+     
         function validateField(fieldName) {
             const field = document.getElementById(fieldName);
             const value = field.value.trim();

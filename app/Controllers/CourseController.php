@@ -31,7 +31,7 @@ class CourseController extends Controller
             $data['total_credits'] = $this->courseModel->getStudentTotalCredits($studentId);
         }
 
-        return view('courses', $data);
+        return view('courses/courses_common', $data);
     }
 
     public function mycourses()
@@ -126,7 +126,6 @@ class CourseController extends Controller
         }
 
         try {
-            
             $enrolledCount = $this->courseModel->getEnrolledStudentsCount($courseId);
             if ($enrolledCount > 0) {
                 return redirect()->back()->with('error', 'Tidak dapat menghapus mata kuliah yang masih memiliki mahasiswa terdaftar');
@@ -152,12 +151,10 @@ class CourseController extends Controller
         $studentId = session()->get('user_id');
 
         try {
-           
             if ($this->courseModel->isStudentEnrolled($studentId, $courseId)) {
                 return redirect()->back()->with('error', 'Anda sudah terdaftar di mata kuliah ini');
             }
 
-            
             $currentCredits = $this->courseModel->getStudentTotalCredits($studentId);
             $course = $this->courseModel->find($courseId);
             
@@ -208,14 +205,22 @@ class CourseController extends Controller
         if (!$courseIds || !is_array($courseIds)) {
             return redirect()->back()->with('error', 'Pilih setidaknya satu mata kuliah');
         }
-
+        
         try {
-           
             $currentCredits = $this->courseModel->getStudentTotalCredits($studentId);
             $selectedCredits = 0;
             
             foreach ($courseIds as $courseId) {
                 $course = $this->courseModel->find($courseId);
+                
+                if (!$course) {
+                    return redirect()->back()->with('error', 'Salah satu mata kuliah tidak ditemukan');
+                }
+                
+                if ($this->courseModel->isStudentEnrolled($studentId, $courseId)) {
+                    return redirect()->back()->with('error', 'Anda sudah terdaftar di salah satu mata kuliah yang dipilih');
+                }
+                
                 $selectedCredits += $course['credits'];
             }
 
@@ -263,7 +268,6 @@ class CourseController extends Controller
         }
     }
 
-    
     public function getAll()
     {
         try {

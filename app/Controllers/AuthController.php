@@ -45,7 +45,6 @@ class AuthController extends Controller
                 'email' => $user['email']
             ];
 
-            // Tambahkan entry_year untuk student
             if ($user['role'] === 'student') {
                 $student = $this->userModel->getStudentById($user['user_id']);
                 $sessionData['entry_year'] = $student['entry_year'] ?? date('Y');
